@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Typecheck and test
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # mw batch reads PDFs with poppler.
+      - run: sudo apt-get update && sudo apt-get install -y poppler-utils
+      - run: npm ci
+      # The /admin test opens the generated museum's Sveltia in Chromium.
+      - run: npx playwright-core install --with-deps chromium
+      - run: npm run typecheck
+      - run: npm test

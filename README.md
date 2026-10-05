@@ -10,10 +10,18 @@ learned from [The Spirit of Martinez](https://github.com/ajcali086/spirit-of-mar
 workbench and the Angie pilot.
 
 ```bash
+npx github:ajcali086/Museumwright- init <name> [--repo owner/name] [--title "..."] [--dir path] [--no-install] [--no-git]
+npx github:ajcali086/Museumwright- pull <url>     [--propose] [--model-url URL] [--max-width 3000] [--no-skip-log] [--museum dir]
+npx github:ajcali086/Museumwright- batch <folder> [--propose] [--model-url URL] [--no-skip-log] [--museum dir]
+```
+
+Installed from git, npm builds `dist/` (plain JavaScript) on install,
+because Node won't strip types from files under `node_modules`. In a
+checkout, `bin/mw.mjs` runs `src/` directly:
+
+```bash
 npm ci
-bin/mw.mjs init <name> [--repo owner/name] [--title "..."] [--dir path] [--no-install] [--no-git]
-bin/mw.mjs pull <url>    [--propose] [--model-url URL] [--max-width 3000] [--no-skip-log] [--museum dir]
-bin/mw.mjs batch <folder> [--propose] [--model-url URL] [--no-skip-log] [--museum dir]
+bin/mw.mjs init <name> ...
 ```
 
 Node 22.6 or later (type stripping). `batch` reads PDFs with poppler
@@ -131,9 +139,22 @@ public render.
 ## Tests
 
 ```bash
-npm test         # 38 tests, offline
+npm test         # 41 tests, offline
 npm run typecheck
 ```
+
+- `test/admin.test.ts` opens a generated museum's `/admin` in Chromium:
+  the pinned Sveltia (served from the `@sveltia/cms` npm package of the
+  same version, in place of unpkg) loads the generated config, signs in
+  with a token, and lists what is committed, once for an empty museum and
+  once after `mw pull --propose`, down to a plate's caption in the editor.
+  GitHub is [a stand-in](test/admin/github.ts) answered from the
+  museum's own git repository; any request it can't answer fails the
+  test. Chromium comes from `MW_CHROMIUM`, `/opt/pw-browsers/chromium`, or
+  `npx playwright-core install chromium`; without one, the test is skipped
+  outside CI.
+- `test/install.test.ts` packs the package, installs it into a scratch
+  project, and runs `mw init` from `node_modules`.
 
 `test/angie.test.ts` is §8, the Angie test, against
 [a local reconstruction of the Angie page](test/fixtures/angie/README.md)

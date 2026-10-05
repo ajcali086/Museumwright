@@ -27,7 +27,7 @@ const types = {
   ".txt": "text/plain; charset=utf-8",
 };
 
-createServer((req, res) => {
+const server = createServer((req, res) => {
   const path = decodeURIComponent(new URL(req.url ?? "/", "http://x").pathname);
   let file = normalize(join(root, path));
   if (!file.startsWith(root)) return res.writeHead(403).end();
@@ -38,4 +38,5 @@ createServer((req, res) => {
   if (!existsSync(file)) return res.writeHead(404).end("not found");
   res.writeHead(200, { "content-type": types[extname(file)] ?? "application/octet-stream" });
   createReadStream(file).pipe(res);
-}).listen(port, () => console.log(`http://localhost:${port}/admin/`));
+});
+server.listen(port, "127.0.0.1", () => console.log(`http://localhost:${server.address().port}/admin/`));

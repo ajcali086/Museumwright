@@ -40,6 +40,12 @@ function structureFiles(dir = STRUCTURE): string[] {
     });
 }
 
+/**
+ * Where a structure file lands. npm never packs a file named .gitignore, so
+ * the structure keeps it as `gitignore`, and init puts the dot back.
+ */
+export const outPath = (f: string) => (f === "gitignore" ? ".gitignore" : f);
+
 const escapes: Record<string, (s: string) => string> = {
   json: (s) => JSON.stringify(s).slice(1, -1),
   yml: (s) => s.replace(/\\/g, "\\\\").replace(/"/g, '\\"'),
@@ -72,7 +78,7 @@ export function init(name: string, opts: InitOptions, log: RunLog): string {
   const files = structureFiles();
   const write = (step: number) => {
     for (const f of files.filter((x) => stepOf(x) === step)) {
-      const out = join(dir, f);
+      const out = join(dir, outPath(f));
       mkdirSync(dirname(out), { recursive: true });
       writeFileSync(out, render(f, readFileSync(join(STRUCTURE, f), "utf8"), vars));
     }
