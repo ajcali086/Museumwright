@@ -7,6 +7,7 @@
  *                         place, or a plate with its caption and credit
  *   #/entities[/<slug>]   entities and the records that anchor them
  *   #/questions[/<id>]    open questions
+ *   #/both-stand          disagreements the museum lets stand, both claims quoted
  *   #/evidence            claims linked to records
  *
  * Every word comes from the slice and is set as text, never as markup: a
@@ -72,6 +73,33 @@ function sourceFacts(r) {
   ]);
 }
 
+/** The quiet doors: records a kept link joins to this one, and what they share. */
+function also(id) {
+  const doors = (slice.links ?? []).filter((l) => l.from === id || l.to === id);
+  if (!doors.length) return [];
+  return [h("h2", {}, "Also"), h("ul", { class: "list" }, doors.map((l) => {
+    const other = l.from === id ? l.to : l.from;
+    return h("li", {}, h("a", { href: `#/records/${other}` }, byId(other)?.title ?? other), " ", h("span", { class: "meta" }, l.basis));
+  }))];
+}
+
+/** A claim's words, where they are said. */
+function claim(c) {
+  const rid = String(c?.span ?? "").replace(/^plate:/, "").split("#")[0];
+  return h("div", { class: "claim" }, h("blockquote", {}, `“${c?.quote ?? ""}”`), h("p", { class: "meta" }, "— ", h("a", { href: `#/records/${rid}` }, byId(rid)?.title ?? rid)));
+}
+
+function bothStandPage() {
+  const entries = slice.bothStand ?? [];
+  return [
+    h("h1", {}, "Both stand"),
+    h("p", { class: "meta" }, "Where the records disagree, the museum keeps both: each claim in its own words, neither corrected to fit the other."),
+    entries.length
+      ? h("ul", { class: "list" }, entries.map((b) => h("li", {}, h("p", { class: "kicker" }, b.status === "settled" ? "Settled" : "Both stand"), h("strong", {}, b.title), claim(b.claim_a), claim(b.claim_b), b.status === "settled" && b.settled_note ? h("p", {}, b.settled_note) : null)))
+      : h("p", { class: "quiet" }, "No disagreements are recorded yet."),
+  ];
+}
+
 function anchoredBy(id) {
   const ents = slice.entities.filter((e) => (e.anchors ?? []).includes(id));
   return ents.length ? [h("h2", {}, "Names it"), h("ul", { class: "list" }, ents.map((e) => h("li", {}, h("a", { href: `#/entities/${e.slug}` }, e.label), " ", h("span", { class: "meta" }, e.kind))))] : [];
@@ -114,7 +142,7 @@ function recordPage(id) {
   if (!r) return notFound(`No record ${id}.`);
   const parent = r.found_in ? byId(r.found_in) : undefined;
   const back = parent ? h("p", { class: "meta" }, "Found in ", h("a", { href: `#/records/${parent.id}` }, parent.title), r.position ? `, plate ${r.position}` : "") : null;
-  if (r.kind === "image") return [back, h("h1", {}, r.title), plateFigure(r, { link: false }), sourceFacts(r), ...anchoredBy(r.id)];
+  if (r.kind === "image") return [back, h("h1", {}, r.title), plateFigure(r, { link: false }), sourceFacts(r), ...anchoredBy(r.id), ...also(r.id)];
   if (r.kind === "log")
     return [back, h("p", { class: "kicker" }, "Log"), h("h1", {}, r.title), h("ul", { class: "list" }, (r.passages ?? []).map((p) => h("li", { class: "meta" }, p.text))), sourceFacts(r)];
 
@@ -136,6 +164,7 @@ function recordPage(id) {
     files.length ? h("p", { class: "meta" }, "Files held: ", files.map((f, i) => [i ? ", " : "", h("a", { href: mediaUrl(f) }, f.split("/").pop())])) : null,
     sourceFacts(r),
     ...anchoredBy(r.id),
+    ...also(r.id),
   ];
 }
 
@@ -197,6 +226,7 @@ function route() {
     : section === "records" ? recordPage(id)
     : section === "entities" ? entitiesPage(id)
     : section === "questions" ? questionsPage(id)
+    : section === "both-stand" ? bothStandPage()
     : section === "evidence" ? evidencePage()
     : notFound("No such page.");
   view.replaceChildren(...[nodes].flat(Infinity).filter(Boolean));

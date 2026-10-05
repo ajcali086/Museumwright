@@ -18,7 +18,7 @@ describe("mw init", () => {
     for (const f of ["src/model/records", "src/model/entities", "src/model/questions", "src/model/evidence.json", "src/data/corrections", "public/images/uploads", "meta/sequences.json", "meta/tombstones.json", "public/admin/index.html", "scripts/cms-build.ts", "scripts/lib/cms.ts", "scripts/check-model.ts", ".github/workflows/ci.yml"])
       assert.ok(existsSync(join(dir, f)), f);
     const config = parse(readFileSync(join(dir, "src/cms/config.yml"), "utf8"));
-    assert.deepEqual(config.collections.map((c: { name: string }) => c.name), ["corrections", "records", "entities", "questions", "evidence"]);
+    assert.deepEqual(config.collections.map((c: { name: string }) => c.name), ["corrections", "records", "entities", "questions", "both_stand", "links", "evidence"]);
     assert.deepEqual(config.backend, { ...config.backend, name: "github", repo: "someone/plain", branch: "main", auth_methods: ["token"] });
     assert.match(readFileSync(join(dir, "public/admin/index.html"), "utf8"), /@sveltia\/cms@\d+\.\d+\.\d+\//);
     assert.match(readFileSync(join(dir, ".github/workflows/ci.yml"), "utf8"), /npm run check:model/);

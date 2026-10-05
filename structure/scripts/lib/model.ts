@@ -6,7 +6,9 @@
  *   src/model/entities/<slug>.json  people, places, ...: each anchored
  *   src/model/questions/<id>.json   bounded open questions
  *   src/model/evidence.json         claims linked to records
- *   src/data/corrections/<id>.json  the queue: text corrections and name proposals
+ *   src/model/both-stand/<id>.json  disagreements standing: two claims, both cited
+ *   src/model/links.json            quiet doors between records, each basis cited
+ *   src/data/corrections/<id>.json  the queue: corrections, and everything the machine proposes
  *   meta/sequences.json             IDs claimed, by input hash
  *   meta/tombstones.json            IDs retired, never reissued
  */
@@ -76,6 +78,8 @@ export type OpenQuestion = {
   evidence?: string[];
   curator: string;
   date: string;
+  /** The question or gap proposal it was kept from, if any. */
+  from_proposal?: string;
 };
 
 export type EvidenceLink = {
@@ -88,12 +92,40 @@ export type EvidenceLink = {
   date: string;
 };
 
+/**
+ * What may arrive in the queue (Proposal Kinds Spec v1). The machine
+ * proposes, the human disposes: no kind writes anything beyond the queue.
+ *   text           a correction: the span as it should read, whole
+ *   name           a name the span spells
+ *   contradiction  two claims in conflict, each cited
+ *   question       something missing, raised by a record
+ *   gap            a hole in a provenance chain, its two ends cited
+ *   duplicate      two records that may be one thing twice
+ *   link           a connection between two records, its basis cited on both
+ */
+export const PROPOSAL_KINDS = ["text", "name", "contradiction", "question", "gap", "duplicate", "link"] as const;
+export type ProposalKind = (typeof PROPOSAL_KINDS)[number];
+
+/** Words a span holds, quoted: the evidence every proposal stands on. */
+export type Cite = { span: string; quote: string };
+
+export const LINK_BASES = ["shared name", "shared place", "shared date"] as const;
+
 export type Correction = {
   id: string;
-  /** "text" (the default): the span as it should read, whole. "name": a name the span spells. */
-  kind?: "text" | "name";
-  /** A span: "<record>#<passage>" or "plate:<record>". */
+  kind?: ProposalKind;
+  /** The span it concerns: "<record>#<passage>" or "plate:<record>" (for the newer kinds, its first citation's). */
   target: string;
+  /** Every proposal of the newer kinds cites its spans; no citation, no acceptance. */
+  cites?: Cite[];
+  /** question: what is missing, and the record that raises it. */
+  question?: { text: string; record: string };
+  /** gap: the record, and what is missing between the two cited ends of its chain. */
+  gap?: { record: string; missing: string };
+  /** duplicate, link: the two records. */
+  pair?: { a: string; b: string };
+  /** link: what the two records share. */
+  basis?: (typeof LINK_BASES)[number];
   proposed_text: string;
   entity_kind?: EntityKind;
   reason: string;
@@ -106,6 +138,33 @@ export type Correction = {
   /** Once applied: the words the span read before. */
   original_text?: string;
   source?: Source;
+};
+
+/** A disagreement standing: both claims cited, neither resolved by the museum. */
+export type BothStand = {
+  id: string;
+  title: string;
+  claim_a: Cite;
+  claim_b: Cite;
+  status: "standing" | "settled";
+  /** Settled only with a note saying how (the book, a record found). */
+  settled_note?: string;
+  opened_by: string;
+  opened_on: string;
+  /** The contradiction proposal it was kept from, if any. */
+  from_proposal?: string;
+};
+
+/** A quiet door between two records ("Also"), its basis cited on both sides. */
+export type RecordLink = {
+  id: string;
+  from: string;
+  to: string;
+  basis: (typeof LINK_BASES)[number];
+  cites: Cite[];
+  curator: string;
+  date: string;
+  from_proposal?: string;
 };
 
 export type Sequence = { prefix: string; width: number; next: number };
@@ -130,6 +189,7 @@ export function loadModel(base: URL) {
     entities: readFolder(base, "src/model/entities") as { file: string; data: Entity }[],
     questions: readFolder(base, "src/model/questions") as { file: string; data: OpenQuestion }[],
     corrections: readFolder(base, "src/data/corrections") as { file: string; data: Correction }[],
+    bothStand: readFolder(base, "src/model/both-stand") as { file: string; data: BothStand }[],
   };
   return {
     museum: readJson<Museum | null>(base, "src/model/museum.json", null),
@@ -139,6 +199,8 @@ export function loadModel(base: URL) {
     questions: files.questions.map((f) => f.data),
     corrections: files.corrections.map((f) => f.data),
     evidence: readJson<EvidenceLink[]>(base, "src/model/evidence.json", []),
+    bothStand: files.bothStand.map((f) => f.data),
+    links: readJson<RecordLink[]>(base, "src/model/links.json", []),
     sequences: readJson<Sequences | null>(base, "meta/sequences.json", null),
     tombstones: readJson<Tombstone[] | null>(base, "meta/tombstones.json", null),
   };

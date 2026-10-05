@@ -25,6 +25,7 @@ import { apply, check, diffOf, museumScript, planDecide, planKeep, planNote, pla
 import { Desk, DeskError, stateDirFor } from "./auth.ts";
 import { planAddEvidence, planApply, planProposeText, planRetire, planSaveEntity, planSaveQuestion, planSaveRecord } from "./edit.ts";
 import * as G from "./git.ts";
+import { planKeepContradiction, planKeepDuplicate, planKeepLink, planKeepQuestion, planMerge, planSettle, readBothStand, readLinks, type QuestionFields } from "./kinds.ts";
 import { isMuseum, readMuseum, spanRecord, spans } from "./museum.ts";
 
 export const DESK_DIR = fileURLToPath(new URL("../../desk/", import.meta.url));
@@ -128,7 +129,8 @@ export function createMuseumServer(opts: ServeOptions) {
           return {
             ...x,
             span: { key: x.target, text: span ?? null, record: rid, recordTitle: byId.get(rid)?.title ?? null, kind: x.target.startsWith("plate:") ? "caption" : "passage" },
-            holds: span !== undefined && span.includes(x.proposed_text),
+            holds: x.kind === "name" ? span !== undefined && span.includes(x.proposed_text) : ((x as { cites?: { span: string; quote: string }[] }).cites ?? []).every((ct) => !!text.get(ct.span)?.includes(ct.quote)),
+            citations: ((x as { cites?: { span: string; quote: string }[] }).cites ?? []).map((ct) => ({ ...ct, text: text.get(ct.span) ?? null, record: spanRecord(ct.span), recordTitle: byId.get(spanRecord(ct.span))?.title ?? null })),
           };
         })
         .sort((a, b) => (a.status === "proposed" ? 0 : 1) - (b.status === "proposed" ? 0 : 1) || a.id.localeCompare(b.id, "en", { numeric: true })),
@@ -136,6 +138,8 @@ export function createMuseumServer(opts: ServeOptions) {
       entities: m.entities,
       unanchored: m.records.filter((r) => (r.kind === "image" || r.kind === "document") && !anchored.has(r.id)).map((r) => r.id),
       questions: m.questions,
+      bothStand: readBothStand(dir),
+      links: readLinks(dir),
       evidence: m.evidence,
       site: site(),
       ids: { record: m.sequences?.record ?? null, correction: m.sequences?.correction ?? null, claims: Object.keys(m.sequences?.claims ?? {}).length, tombstones: m.tombstones },
@@ -319,9 +323,24 @@ export function createMuseumServer(opts: ServeOptions) {
             if (kept.ok) rmSync(folder, { recursive: true, force: true });
             return { ...kept, log: log.lines };
           }
-          case "keep":
+          case "keep": {
             needMuseum();
-            return planned(planKeep(dir, str(b.id, "the proposal"), b.as as KeepAs, who), preview, who);
+            const id = str(b.id, "the proposal");
+            const kind = readMuseum(dir).corrections.find((c) => c.id === id)?.kind;
+            const plan =
+              kind === "contradiction" ? planKeepContradiction(dir, id, typeof b.title === "string" ? b.title : "", who)
+              : kind === "question" || kind === "gap" ? planKeepQuestion(dir, id, (b.question ?? {}) as QuestionFields, who)
+              : kind === "link" ? planKeepLink(dir, id, who)
+              : kind === "duplicate" ? planKeepDuplicate(dir, id, who)
+              : planKeep(dir, id, b.as as KeepAs, who);
+            return planned(plan, preview, who);
+          }
+          case "merge":
+            needMuseum();
+            return planned(planMerge(dir, str(b.id, "the proposal"), str(b.keep, "the record to keep"), who), preview, who);
+          case "settle":
+            needMuseum();
+            return planned(planSettle(dir, str(b.id, "the entry"), str(b.note, "a note")), preview, who);
           case "decide": {
             needMuseum();
             const ids = Array.isArray(b.ids) ? (b.ids as string[]) : [];

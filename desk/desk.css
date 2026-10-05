@@ -135,3 +135,9 @@ ul.files li { display: grid; grid-template-columns: 1fr 2fr; gap: 0.5rem; align-
 @media (max-width: 40rem) {
   .aliases .alias { grid-template-columns: 1fr; }
 }
+
+/* The newer kinds */
+.ask { font-size: 1.05rem; font-weight: 600; margin: 0.5rem 0; }
+.hole { text-align: center; color: var(--muted); border-left: 3px dashed var(--bad); margin: 0.25rem 0 0.25rem 0.5rem; padding: 0.35rem 0.75rem; font-style: italic; }
+.card.pair { margin: 0; }
+.card.pair .thumb { float: right; margin-left: 0.5rem; }

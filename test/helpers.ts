@@ -87,7 +87,10 @@ export async function serve(routes: Map<string, { type: string; body: Uint8Array
  * contains, plus one it doesn't (which the span rule must drop), and one
  * misspelled.
  */
-export async function stubModel(names: [string, string][]): Promise<{ url: string; server: Server; prompts: string[] }> {
+/** A task's answer, given the task's name and the lines it was given ("[S3] …", "[p2] …", "[r-0003] …"). */
+export type TaskAnswer = (task: string, lines: { label: string; text: string }[]) => Record<string, unknown>;
+
+export async function stubModel(names: [string, string][], tasks?: TaskAnswer): Promise<{ url: string; server: Server; prompts: string[] }> {
   const prompts: string[] = [];
   const server = createServer((req, res) => {
     let body = "";
@@ -100,6 +103,16 @@ export async function stubModel(names: [string, string][]): Promise<{ url: strin
       const { prompt, grammar } = JSON.parse(body);
       if (!grammar) return res.writeHead(400).end("no grammar");
       prompts.push(prompt);
+      const task = /\nTask: (\w+)\n/.exec(prompt)?.[1];
+      if (task) {
+        const body: string = prompt.split(`Task: ${task}\n`)[1].split("<|im_end|>")[0];
+        const lines = (body as string).split("\n").flatMap((l: string) => {
+          const m = /^\[([^\]]+)\] (.*)$/.exec(l);
+          return m ? [{ label: m[1], text: m[2] }] : [];
+        });
+        const answer = tasks?.(task, lines) ?? { pairs: [], questions: [], gaps: [], links: [] };
+        return res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ content: JSON.stringify(answer) }));
+      }
       const passage = prompt.split("Passage:\n")[1]?.split("<|im_end|>")[0] ?? "";
       const found = names.filter(([n]) => passage.includes(n)).map(([name, kind]) => ({ name, kind }));
       if (found.length) found.push({ name: "Josephine Bonaparte", kind: "person" }, { name: found[0].name.toUpperCase() + "X", kind: found[0].kind });

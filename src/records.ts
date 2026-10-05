@@ -141,3 +141,57 @@ export function nameItem(o: {
     },
   };
 }
+
+/** A record a proposal points at: one this run is bringing in (by its input hash), or one the museum has (by its ID). */
+export type RecordRef = { hash: string } | { id: string };
+/** A citation: the record, the span within it ("p3", "caption", or for a record the museum has, its full span key), the words. */
+export type CiteRef = { ref: RecordRef; span: string; quote: string };
+
+export type Kind = "contradiction" | "question" | "gap" | "duplicate" | "link";
+
+/**
+ * A proposal of one of the newer kinds, in the queue's shape: status
+ * proposed, every claim cited. What it becomes once kept is the curator's
+ * act at the desk; the machine writes nothing beyond the queue.
+ */
+export function proposalItem(o: {
+  hash: string;
+  kind: Kind;
+  cites: CiteRef[];
+  summary: (id: (r: RecordRef) => string) => string;
+  question?: { text: string; record: RecordRef };
+  gap?: { record: RecordRef; missing: string };
+  pair?: { a: RecordRef; b: RecordRef };
+  basis?: string;
+  model: string;
+  prov: Provenance;
+}): Item {
+  const refs = [...o.cites.map((c) => c.ref), ...(o.question ? [o.question.record] : []), ...(o.gap ? [o.gap.record] : []), ...(o.pair ? [o.pair.a, o.pair.b] : [])];
+  return {
+    hash: o.hash,
+    type: "correction",
+    label: `${o.kind} proposal`,
+    requires: [...new Set(refs.flatMap((r) => ("hash" in r ? [r.hash] : [])))],
+    build: (id, ref) => {
+      const rid = (r: RecordRef) => ("hash" in r ? ref(r.hash)! : r.id);
+      const key = (c: CiteRef) => ("id" in c.ref && c.span.includes(c.ref.id) ? c.span : c.span === "caption" ? `plate:${rid(c.ref)}` : `${rid(c.ref)}#${c.span}`);
+      const cites = o.cites.map((c) => ({ span: key(c), quote: c.quote }));
+      return {
+        id,
+        kind: o.kind,
+        target: cites[0]?.span ?? (o.question ? `plate:${rid(o.question.record)}` : ""),
+        proposed_text: o.summary(rid),
+        cites,
+        ...(o.question ? { question: { text: o.question.text, record: rid(o.question.record) } } : {}),
+        ...(o.gap ? { gap: { record: rid(o.gap.record), missing: o.gap.missing } } : {}),
+        ...(o.pair ? { pair: { a: rid(o.pair.a), b: rid(o.pair.b) } } : {}),
+        ...(o.basis ? { basis: o.basis } : {}),
+        reason: `Noticed by the local model. A proposal: the curator keeps it or holds it back.`,
+        proposed_by: "mw",
+        date: o.prov.extracted_at.slice(0, 10),
+        status: "proposed",
+        source: source(o.prov, o.hash, { model: o.model }),
+      };
+    },
+  };
+}
