@@ -70,7 +70,7 @@ describe("mw batch", () => {
     const before = tree(dir);
     const again = await mw(["batch", folder, "--museum", dir], { MW_NOW: "2026-11-01T00:00:00Z" });
     assert.equal(again.code, 0, again.out);
-    assert.match(again.out, /claimed 0 new IDs/);
+    assert.match(again.out, /claimed 0 new IDs/i);
     assert.deepEqual(tree(dir), before);
   });
 

@@ -2,8 +2,10 @@
 // mw: the Museumwright starter. In a checkout it runs src/cli.ts under
 // Node's type stripping; installed as a package (from git, under
 // node_modules, where Node won't strip types) it runs the build in dist/.
-// Either way, Node's fetch uses the environment's proxy where one is set.
-import { spawnSync } from "node:child_process";
+// Either way, Node's fetch uses the environment's proxy where one is set,
+// and a signal to this process (Ctrl+C, a service manager's stop) reaches
+// the one doing the work.
+import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -21,5 +23,9 @@ if ((env.HTTPS_PROXY || env.https_proxy || env.HTTP_PROXY) && !env.NODE_USE_ENV_
 const args = useSrc
   ? ["--experimental-strip-types", "--no-warnings=ExperimentalWarning", src]
   : [dist];
-const run = spawnSync(process.execPath, [...args, ...process.argv.slice(2)], { stdio: "inherit", env });
-process.exit(run.status ?? 1);
+const child = spawn(process.execPath, [...args, ...process.argv.slice(2)], { stdio: "inherit", env });
+for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"])
+  process.on(signal, () => {
+    if (!child.killed) child.kill(signal);
+  });
+child.on("exit", (code, signal) => process.exit(code ?? (signal ? 1 : 0)));

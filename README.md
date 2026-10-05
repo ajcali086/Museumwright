@@ -9,20 +9,50 @@ Built to the Starter Spec v2 (2026-10-04). The structure it generates was
 learned from [The Spirit of Martinez](https://github.com/ajcali086/spirit-of-martinez)'s
 workbench and the Angie pilot.
 
-```bash
-npx github:ajcali086/Museumwright- init <name> [--repo owner/name] [--title "..."] [--dir path] [--no-install] [--no-git]
-npx github:ajcali086/Museumwright- pull <url>     [--propose] [--model-url URL] [--max-width 3000] [--no-skip-log] [--museum dir]
-npx github:ajcali086/Museumwright- batch <folder> [--propose] [--model-url URL] [--no-skip-log] [--museum dir]
-```
-
-Installed from git, npm builds `dist/` (plain JavaScript) on install,
-because Node won't strip types from files under `node_modules`. In a
-checkout, `bin/mw.mjs` runs `src/` directly:
+## Install, and the five commands
 
 ```bash
-npm ci
-bin/mw.mjs init <name> ...
+npm install -g github:ajcali086/Museumwright-     # puts mw on the PATH
+mw doctor                                        # first: is this box ready?
 ```
+
+```
+mw new            start a museum (asks a few questions)
+mw pull <url>     bring in a web page
+mw add <folder>   bring in files: photos, PDFs, text
+mw desk           open the curator's desk on this box's network
+mw sync           trade commits with GitHub
+
+mw doctor         check this box has what mw needs
+```
+
+No flags are needed: each has a default, and `mw <command> --help` shows
+examples first. A refusal is said in plain words, with what to do next;
+`--verbose` shows the rest. `npx github:ajcali086/Museumwright- <command>`
+works without installing.
+
+- **`mw new`** asks the museum's name, title and GitHub repository, lists
+  every file it will write, and asks before writing them. It then runs
+  init's steps and ends with the check green. Passing a name, `--repo` and
+  `--yes` skips the questions, for scripts.
+- **`mw pull`** proposes names on its own when a local model answers at
+  `MW_MODEL_URL` (default `http://127.0.0.1:8080`). With no model it says
+  so in one line and goes on (`--no-propose` to skip asking).
+- **`mw pull` and `mw add`, in a museum with a git history,** commit what
+  the check lets stand, as the desk does. If the check refuses, nothing is
+  kept.
+- **`mw desk`** serves this folder's museum, or creates one at `./museum`
+  from the desk. It prints the network addresses and, on first run, the
+  setup code, and stays up until Ctrl+C.
+- **`mw sync`** only fast-forwards, and says which happened: sent, took,
+  already in step, or "both sides moved", with the commands that settle
+  it.
+- **`mw doctor`** checks Node.js (22.6+), git, poppler, the local model,
+  free disk and the museum here (its check, its GitHub remote). For
+  anything missing, it prints the command that fixes it.
+
+The older names still work for scripts: `init`, `batch`, `serve`. In a
+checkout of this repository, run `npm ci` and then `bin/mw.mjs …`.
 
 Node 22.6 or later (type stripping). `batch` reads PDFs with poppler
 (`pdfinfo`, `pdftotext`, `pdftoppm`).
@@ -235,7 +265,7 @@ reaches it. Not a theme (spec §7); a museum replaces it when it has one.
 ## Tests
 
 ```bash
-npm test         # 89 tests, offline
+npm test         # 100 tests, offline
 npm run typecheck
 ```
 
@@ -268,6 +298,10 @@ npm run typecheck
   Site.
 - `test/desk.test.ts` builds a museum from nothing through the desk in
   Chromium, from the setup code to the viewer showing the kept name.
+- `test/shell.test.ts` drives the five commands and the doctor as a
+  curator would: the overview, help, plain refusals, `mw new`, pull and
+  add committing, sync (sent, took, in step, both moved), the desk's
+  printout, and the old names.
 - `test/install.test.ts` packs the package, installs it into a scratch
   project, and runs `mw init` from `node_modules`.
 

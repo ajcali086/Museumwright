@@ -32,5 +32,14 @@ describe("installed from a package", () => {
     assert.match(init.stdout, /6 purity ✓/);
     assert.ok(existsSync(join(mill, ".gitignore")), "the dot is put back");
     assert.ok(!readdirSync(mill).includes("gitignore"));
+
+    // npm install -g puts mw on the PATH (a prefix stands in for the global folder).
+    const prefix = tmp("global");
+    const global = spawnSync("npm", ["install", "-g", "--prefix", prefix, "--no-audit", "--no-fund", join(out, tgz)], { encoding: "utf8" });
+    assert.equal(global.status, 0, global.stderr);
+    const bin = process.platform === "win32" ? join(prefix, "mw.cmd") : join(prefix, "bin", "mw");
+    const bare = spawnSync(bin, [], { encoding: "utf8" });
+    assert.equal(bare.status, 0, bare.stderr);
+    assert.match(bare.stdout, /mw new[\s\S]*mw doctor/);
   });
 });

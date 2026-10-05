@@ -12,9 +12,10 @@ const TOOL_MODULES = fileURLToPath(new URL("../node_modules/", import.meta.url))
 export const tmp = (name: string) => mkdtempSync(join(tmpdir(), `mw-${name}-`));
 
 /** Runs mw without blocking this process, which may be serving the page and the model it calls. */
-export function mw(args: string[], env: Record<string, string> = {}): Promise<{ code: number | null; out: string }> {
+export function mw(args: string[], env: Record<string, string> = {}, cwd?: string): Promise<{ code: number | null; out: string }> {
   return new Promise((ok) => {
     const child = spawn(process.execPath, [MW, ...args], {
+      cwd,
       env: { ...process.env, MW_NOW: "2026-10-04T12:00:00Z", ...env },
     });
     let out = "";
