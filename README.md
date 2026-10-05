@@ -136,10 +136,22 @@ entities, questions, evidence and the museum record, and nothing else:
 the check holds that file to its list, so a proposal has no path to the
 public render.
 
+## The generated museum's viewer
+
+Every generated museum has a plain viewer at `/` (`structure/public/index.html`,
+`viewer.js`, `viewer.css`): no framework, no build beyond the public slice
+it reads. Records first, each document with its plate thumbnails; a
+document's page shows its passages with each plate after the passage it
+follows; a plate's page shows the image, the caption (or "No caption
+given."), the credit, the status and where it came from; then entities,
+open questions and evidence. Words from a pulled page are set as text,
+never markup. It reads only `/data/museum.json`, so nothing in the queue
+reaches it. Not a theme (spec §7); a museum replaces it when it has one.
+
 ## Tests
 
 ```bash
-npm test         # 41 tests, offline
+npm test         # 50 tests, offline
 npm run typecheck
 ```
 
@@ -153,6 +165,10 @@ npm run typecheck
   test. Chromium comes from `MW_CHROMIUM`, `/opt/pw-browsers/chromium`, or
   `npx playwright-core install chromium`; without one, the test is skipped
   outside CI.
+- `test/viewer.test.ts` opens the viewer over an empty museum, an
+  unbuilt one, and one after a pull with a kept name: plates in place,
+  captions verbatim, a held file loading, hostile text staying text, the
+  queue never showing on any page, and no sideways scroll on a phone.
 - `test/install.test.ts` packs the package, installs it into a scratch
   project, and runs `mw init` from `node_modules`.
 

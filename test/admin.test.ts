@@ -7,35 +7,19 @@
  * Playwright's (npx playwright-core install chromium).
  */
 import assert from "node:assert/strict";
-import { execFileSync, spawn, type ChildProcess } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { after, before, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 import { chromium, type Browser, type Page } from "playwright-core";
+import { commit, devServer, executablePath, noBrowser } from "./admin/browser.ts";
 import { githubStub } from "./admin/github.ts";
 import { angiePage } from "./fixtures/angie/page.ts";
-import { freshMuseum, mw, run, serve, stubModel } from "./helpers.ts";
+import { freshMuseum, mw, serve, stubModel } from "./helpers.ts";
 
 const SVELTIA = fileURLToPath(new URL("../node_modules/@sveltia/cms/dist/", import.meta.url));
 const pinned = (dir: string) => /@sveltia\/cms@([\d.]+)\//.exec(readFileSync(join(dir, "public/admin/index.html"), "utf8"))![1];
-const executablePath = process.env.MW_CHROMIUM ?? (existsSync("/opt/pw-browsers/chromium") ? "/opt/pw-browsers/chromium" : undefined);
-
-function commit(dir: string) {
-  execFileSync("git", ["init", "-q", "-b", "main"], { cwd: dir });
-  execFileSync("git", ["add", "-A"], { cwd: dir });
-  execFileSync("git", ["-c", "user.name=Curator", "-c", "user.email=curator@example.org", "commit", "-qm", "museum"], { cwd: dir });
-}
-
-/** The museum's own dev server (scripts/serve.mjs), on a free port. */
-async function devServer(dir: string): Promise<{ url: string; proc: ChildProcess }> {
-  const built = run(dir, "scripts/cms-build.ts");
-  assert.equal(built.code, 0, built.out);
-  const proc = spawn(process.execPath, ["scripts/serve.mjs"], { cwd: dir, env: { ...process.env, PORT: "0" } });
-  const url = await new Promise<string>((ok) => proc.stdout!.on("data", (d) => ok(String(d).trim())));
-  return { url, proc };
-}
-
 type Opened = { page: Page; unknown: string[]; errors: string[]; text: () => Promise<string> };
 
 async function openAdmin(browser: Browser, dir: string, url: string, owner: string, repo: string): Promise<Opened> {
@@ -53,7 +37,7 @@ async function openAdmin(browser: Browser, dir: string, url: string, owner: stri
   await page.route("https://api.github.com/**", (r) => stub.handle(r));
   // Fonts, icons and status pings: not needed to read the config or the repository.
   await page.route(/^https:\/\/(cdn\.jsdelivr\.net|www\.githubstatus\.com|unpkg\.com\/@sveltia\/cms\/package\.json)/, (r) => r.fulfill({ status: 404 }));
-  await page.goto(url);
+  await page.goto(`${url}admin/`);
   return { page, unknown: stub.unknown, errors, text: () => page.locator("body").innerText() };
 }
 
@@ -76,7 +60,7 @@ async function counts(page: Page): Promise<Record<string, number>> {
   return out;
 }
 
-describe("/admin, opened in Chromium", { skip: !executablePath && !process.env.CI ? "no Chromium (set MW_CHROMIUM)" : false }, () => {
+describe("/admin, opened in Chromium", { skip: noBrowser }, () => {
   let browser: Browser;
   const stops: (() => void)[] = [];
   before(async () => {
@@ -122,7 +106,7 @@ describe("/admin, opened in Chromium", { skip: !executablePath && !process.env.C
     assert.deepEqual(await counts(o.page), { Corrections: queued, Records: 11, Entities: 0, "Open questions": 0, Evidence: 0 });
     assert.match(await o.text(), /name · r-0001#p\d+ — .* · proposed · (Watts Towers|Virginia Sullivan|Martinez Daily Standard)/);
 
-    await o.page.goto(`${url}#/collections/records/entries/r-0003`);
+    await o.page.goto(`${url}admin/#/collections/records/entries/r-0003`);
     await o.page.getByText("Caption (verbatim)").first().waitFor({ timeout: 15_000 });
     const captions = await o.page.locator("textarea").evaluateAll((els) => els.map((e) => (e as HTMLTextAreaElement).value));
     assert.ok(captions.includes(fx.captions[1]), `the editor shows the caption verbatim: ${JSON.stringify(captions)}`);

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@@MW_TITLE@@</title>
+    <link rel="stylesheet" href="/viewer.css" />
+  </head>
+  <body>
+    <!--
+      The viewer: a plain page over the public slice (/data/museum.json,
+      written by `npm run build`). It reads nothing else, so the corrections
+      queue never reaches it. Not a theme: replace it when the museum has one.
+    -->
+    <header class="site">
+      <a class="name" href="#/">@@MW_TITLE@@</a>
+      <nav>
+        <a href="#/">Records</a>
+        <a href="#/entities">Entities</a>
+        <a href="#/questions">Questions</a>
+        <a href="#/evidence">Evidence</a>
+      </nav>
+    </header>
+    <main id="view" aria-live="polite"><p class="quiet">Loading…</p></main>
+    <footer class="site"><a href="/admin/">Curator sign-in</a></footer>
+    <script type="module" src="/viewer.js"></script>
+  </body>
+</html>
