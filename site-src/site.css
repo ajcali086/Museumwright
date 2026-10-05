@@ -1,0 +1,17 @@
+:root { color-scheme: light dark; --ink: #1d1c1a; --muted: #6a665e; --rule: #dedad1; --paper: #f7f6f2; --card: #ffffff; --accent: #2f5d50; --accent-ink: #fff; }
+@media (prefers-color-scheme: dark) { :root { --ink: #ebe8e1; --muted: #a29d92; --rule: #34322d; --paper: #161614; --card: #1f1e1b; --accent: #7fbfa9; --accent-ink: #10201b; } }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--paper); color: var(--ink); font: 17px/1.6 Georgia, "Times New Roman", serif; }
+main { max-width: 44rem; margin: 0 auto; padding: 3rem 16px 4rem; }
+h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 1rem; }
+h2 { font-size: 1.15rem; margin: 2.5rem 0 0.75rem; font-family: system-ui, sans-serif; }
+.kicker { font: 13px/1 system-ui, sans-serif; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 0.75rem; }
+.lede { font-size: 1.15rem; }
+a { color: var(--accent); }
+code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 14px; }
+pre { background: var(--card); border: 1px solid var(--rule); border-radius: 8px; padding: 0.75rem 1rem; overflow-x: auto; }
+.actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin: 1.5rem 0; }
+.button { font: 15px/1 system-ui, sans-serif; padding: 0.7rem 1rem; border-radius: 6px; border: 1px solid var(--rule); background: var(--card); color: var(--ink); text-decoration: none; }
+.button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+li { margin-bottom: 0.4rem; }
+.foot { margin-top: 3rem; color: var(--muted); font-size: 0.95rem; }

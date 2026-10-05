@@ -103,6 +103,8 @@ export type Correction = {
   decided_by?: string;
   decided_on?: string;
   curator_note?: string;
+  /** Once applied: the words the span read before. */
+  original_text?: string;
   source?: Source;
 };
 

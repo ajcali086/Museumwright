@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Museumwright</title>
+    <meta name="description" content="mw: build a small museum's archive from a page, a folder or a box of photographs, and run it on its own network." />
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="site.css" />
+  </head>
+  <body>
+    <main>
+      <p class="kicker">Museumwright</p>
+      <h1>A museum's archive, built from what a family kept.</h1>
+      <p class="lede">
+        <code>mw</code> writes a museum's records from a web page, a folder of files or a phone's photographs; checks every
+        save against the museum's rules; and runs the museum on its own box, on its own network, with or without the web.
+      </p>
+      <p class="actions">
+        <a class="button primary" href="demo/">See a demo museum</a>
+        <a class="button" href="https://github.com/ajcali086/Museumwright-">The code</a>
+      </p>
+
+      <h2>On a box, for a museum</h2>
+      <pre><code>npx github:ajcali086/Museumwright- serve --museum ./museum --port 80</code></pre>
+      <p>Visitors on the network see the museum. The curator signs in to the desk at <code>/desk/</code> and builds the archive from nothing, in three stages:</p>
+      <ol>
+        <li><strong>Collection.</strong> Create the museum; add a page from the web, files from the box, or photographs from a phone.</li>
+        <li><strong>Archival work.</strong> Decide the names a local model noticed, each shown in the words that spell it; catalogue, correct, link evidence, open questions, retire. Every change is shown before it is written, and the museum's own check decides whether it stays.</li>
+        <li><strong>Site.</strong> What visitors see, rebuilt after every change; the history in git on the box, sent to GitHub when the web is there.</li>
+      </ol>
+
+      <h2>From a terminal</h2>
+      <pre><code>npx github:ajcali086/Museumwright- init "The Mill Museum" --repo you/mill-museum
+npx github:ajcali086/Museumwright- pull https://… --propose --museum mill-museum
+npx github:ajcali086/Museumwright- batch ./box-3 --museum mill-museum</code></pre>
+
+      <h2>What it holds to</h2>
+      <ul>
+        <li>A caption or credit is the source's, word for word, or empty: never invented.</li>
+        <li>A name the machine noticed is a proposal, not an entity, and its passage must spell it.</li>
+        <li>IDs are claimed once; the same input gets the same IDs; a retired ID is never reissued.</li>
+        <li>What visitors see has no path to what is still undecided.</li>
+      </ul>
+
+      <p class="foot">The demo is built by <code>mw</code> during each deploy, from a local copy of a page in the tests. It is read-only: the desk runs on a museum's own box, not here.</p>
+    </main>
+  </body>
+</html>

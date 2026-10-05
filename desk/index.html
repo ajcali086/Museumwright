@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="data:," />
+    <meta name="robots" content="noindex" />
+    <title>Desk</title>
+    <link rel="stylesheet" href="/desk/desk.css" />
+  </head>
+  <body>
+    <header class="bar" id="bar" hidden>
+      <div class="museum"><span id="museum-title">Desk</span> <a id="open-museum" href="/" target="_blank" rel="noopener">Open the museum ↗</a></div>
+      <nav id="nav" aria-label="The desk">
+        <div class="stage"><span class="stage-name">Collection</span>
+          <a href="#/add" data-tab="add">Add</a>
+        </div>
+        <div class="stage"><span class="stage-name">Archival work</span>
+          <a href="#/queue" data-tab="queue">Queue <span class="count" id="queue-count"></span></a>
+          <a href="#/records" data-tab="records">Records</a>
+          <a href="#/entities" data-tab="entities">Entities</a>
+          <a href="#/questions" data-tab="questions">Questions</a>
+          <a href="#/evidence" data-tab="evidence">Evidence</a>
+          <a href="#/check" data-tab="check">Check <span class="dot" id="check-dot"></span></a>
+        </div>
+        <div class="stage"><span class="stage-name">Site</span>
+          <a href="#/site" data-tab="site">Site</a>
+          <a href="#/sync" data-tab="sync">GitHub</a>
+          <a href="#/ids" data-tab="ids">IDs &amp; export</a>
+        </div>
+      </nav>
+      <div class="who"><span id="who"></span> <button type="button" class="link" id="sign-out">Sign out</button></div>
+    </header>
+    <div id="notice" role="status" aria-live="polite" hidden></div>
+    <main id="view"><p class="quiet">Loading…</p></main>
+    <script type="module" src="/desk/desk.js"></script>
+  </body>
+</html>

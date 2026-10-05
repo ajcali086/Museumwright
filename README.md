@@ -27,6 +27,90 @@ bin/mw.mjs init <name> ...
 Node 22.6 or later (type stripping). `batch` reads PDFs with poppler
 (`pdfinfo`, `pdftotext`, `pdftoppm`).
 
+## `mw serve`: the museum box
+
+One server for a museum that runs on its own box on a LAN, with or
+without the web:
+
+```bash
+npx github:ajcali086/Museumwright- serve --museum ./museum --port 8080
+```
+
+- **`/`, for visitors:** the museum's viewer over its public slice, and the
+  files it shows. Read-only, no sign-in. Before a museum exists, a page
+  saying one is being set up.
+- **`/desk/`, for the curator:** the museum's own admin, with no GitHub
+  and no Sveltia needed. It builds the archive from nothing, in three
+  stages.
+  1. **Collection.** Create a museum (the same `mw init`, verified the
+     same way), or bring one in from GitHub. Then add to it:
+     - a page from the web (`mw pull`, with names proposed by the local
+       model if one is running);
+     - files from the box or a phone's camera (`mw batch`). An optional
+       "what this is" becomes a dated note, never a caption.
+  2. **Archival work.** Every collection, edited at the desk:
+     - **Queue** (the home screen): proposed names, each marked in the span
+       that spells it. Keep one as a new entity or as another name of an
+       existing one, hold it back, or reject it, singly or in bulk. Text
+       corrections are accepted, then applied.
+     - **Records:** catalogue one by hand (something the museum knows of,
+       its ID from the sequence). Edit a title or rights holder. Propose a
+       correction to any passage or caption. Change a status with a dated
+       note. Retire a record: its ID goes on the tombstones, its files go,
+       and the check refuses while anything still points at it.
+     - **Entities:** make or edit one, with its anchors and the other names
+       it goes by, each with the records that write it so. Also listed:
+       the records that name nothing yet.
+     - **Questions:** open or edit one. It closes only on evidence.
+     - **Evidence:** link a claim to a record. The quote must be in its
+       span word for word, and links are appended, never rewritten.
+     - **Check:** `check:model` in plain lines.
+  3. **Site.** What visitors see now, beside what only the desk sees.
+     Also here: GitHub, which is optional, and IDs & export.
+
+  A source's words (a pulled record's caption, credit and passages) are
+  never edited in place. They change only by a correction that is
+  proposed, accepted and applied. An applied correction keeps the words it
+  replaced, and the check holds that the span then reads as corrected.
+
+Every change at the desk is shown first: the files it will write, before
+and after. Then it is written, and the museum's own `check:model` decides.
+If the check refuses, the files are put back and the refusal is the
+answer. If it passes, the public slice is rebuilt and the change is one
+git commit on the box, in the curator's name. The span rule holds at the
+desk too: a name its span doesn't contain can't be kept, and the refusal
+quotes the span.
+
+**Offline and online.** The box keeps the museum's history in git, so
+nothing waits on the web. When the web is there, Sync sends the box's
+commits to GitHub and takes GitHub's (Sveltia's saves, say). It only ever
+fast-forwards: if both sides have moved on, it says so and merges
+nothing. Publishing is the curator's act; nothing is sent on its own. A
+token, if given, is kept in the state directory and passed to git per
+command, never written into the repository.
+
+**Who gets in.** On first start the server prints a one-time setup code
+to its own console. Whoever can read that console sets the desk's
+passcode, so the first person to reach the box over the LAN can't claim
+it. The passcode is kept as a scrypt hash in a state directory outside the
+museum's repository (`--state`, default
+`~/.local/state/museumwright/<id>/`). Sign-in is a session cookie
+(HttpOnly, SameSite=Strict, 12 hours, gone on restart), and each decision
+records the name typed at sign-in. Desk writes must carry a header no
+cross-site form can send. Missed passcodes slow down the next attempt.
+
+**On the box:** Node 22.6+, git, poppler-utils for PDFs, and, for proposed
+names, llama.cpp's `llama-server` with Qwen3-1.7B (`--model-url`,
+default `http://127.0.0.1:8080`). Run `serve` on another port, for example
+`--port 80`. To keep it running, use a systemd unit or similar, with
+`WorkingDirectory` set to where the museum should live.
+
+This is the "box track" the App Spec v1 deferred ("no local-git backend
+in v1"): Sveltia can't run without GitHub and unpkg, so on an offline box
+the desk is the editor. Sveltia at `/admin` still works for the same
+repository on GitHub, and the two never disagree: there is one set of
+folders, and Sync carries commits both ways.
+
 ## `mw init`: generated, not stripped
 
 The new repository is written bottom-up from [`structure/`](structure),
@@ -151,7 +235,7 @@ reaches it. Not a theme (spec §7); a museum replaces it when it has one.
 ## Tests
 
 ```bash
-npm test         # 50 tests, offline
+npm test         # 89 tests, offline
 npm run typecheck
 ```
 
@@ -169,6 +253,21 @@ npm run typecheck
   unbuilt one, and one after a pull with a kept name: plates in place,
   captions verbatim, a held file loading, hostile text staying text, the
   queue never showing on any page, and no sideways scroll on a phone.
+- `test/serve.test.ts` drives `mw serve` through its API from nothing: the
+  setup code and passcode, refusing writes from elsewhere, creating a
+  museum, a pull with proposals, keep (previewed first), the span rule and
+  a relabel refused, hold back (public slice unchanged), status with a
+  note, a refused write taken back, uploads with a note, sync against a
+  bare repository (push, take, refuse a divergence), export, a restart,
+  and bringing a museum in by clone.
+- `test/local-admin.test.ts` builds and edits a museum through the API
+  with no remote: a record by hand, entities, questions, evidence, a
+  correction proposed, accepted and applied, a record retired, each
+  refusal where the rules say no.
+- `test/local-desk.test.ts` does the same in Chromium, from Collection to
+  Site.
+- `test/desk.test.ts` builds a museum from nothing through the desk in
+  Chromium, from the setup code to the viewer showing the kept name.
 - `test/install.test.ts` packs the package, installs it into a scratch
   project, and runs `mw init` from `node_modules`.
 

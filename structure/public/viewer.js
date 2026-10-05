@@ -26,8 +26,8 @@ function h(tag, attrs = {}, ...children) {
 
 /** A link only for web addresses: a source URL is the page's to give, not ours to run. */
 const safeHref = (url) => (/^https?:\/\//i.test(url ?? "") ? url : undefined);
-/** A held file's address on this site: public/images/uploads/x.jpg is served at /images/uploads/x.jpg. */
-const mediaUrl = (path) => "/" + String(path).replace(/^public\//, "");
+/** A held file's address, relative to the page: public/images/uploads/x.jpg is served at images/uploads/x.jpg, so the museum works in a sub-folder too. */
+const mediaUrl = (path) => String(path).replace(/^public\//, "");
 const isImage = (path) => /\.(jpe?g|png|gif|webp|avif)$/i.test(path);
 const byId = (id) => slice.records.find((r) => r.id === id);
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
@@ -210,7 +210,7 @@ function route() {
 }
 
 try {
-  const res = await fetch("/data/museum.json", { cache: "no-store" });
+  const res = await fetch("data/museum.json", { cache: "no-store" });
   if (!res.ok) throw new Error(String(res.status));
   slice = await res.json();
   window.addEventListener("hashchange", route);

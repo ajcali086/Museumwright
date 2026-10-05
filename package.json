@@ -14,7 +14,8 @@
     "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test --test-concurrency=1 test/*.test.ts",
     "typecheck": "tsc -p .",
     "build": "tsc -p tsconfig.build.json",
-    "prepare": "tsc -p tsconfig.build.json"
+    "prepare": "tsc -p tsconfig.build.json",
+    "site": "npm run build && node --experimental-strip-types --no-warnings=ExperimentalWarning scripts/site.ts"
   },
   "dependencies": {
     "linkedom": "0.18.13",
@@ -36,6 +37,7 @@
     "dist",
     "structure",
     "LICENSE",
-    "README.md"
+    "README.md",
+    "desk"
   ]
 }
