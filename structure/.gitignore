@@ -1,0 +1,7 @@
+node_modules/
+.DS_Store
+*.log
+
+# Generated on every dev start and build (scripts/cms-build.ts, scripts/build-public.ts).
+public/admin/config.yml
+public/data/
