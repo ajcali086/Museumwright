@@ -18,7 +18,7 @@ describe("installed from a package", () => {
     const out = tmp("pack");
     const tgz = execFileSync("npm", ["pack", "--silent", "--pack-destination", out], { cwd: ROOT, encoding: "utf8" }).trim().split("\n").pop()!;
     const listing = execFileSync("tar", ["-tzf", join(out, tgz)], { encoding: "utf8" });
-    for (const f of ["package/bin/mw.mjs", "package/dist/cli.js", "package/structure/gitignore", "package/structure/.github/workflows/ci.yml", "package/structure/src/model/records/.gitkeep"])
+    for (const f of ["package/bin/mw.mjs", "package/dist/cli.js", "package/structure/gitignore", "package/structure/.github/workflows/ci.yml", "package/structure/src/model/records/.gitkeep", "package/desk/index.html", "package/desk/desk.js", "package/dist/serve/server.js"])
       assert.ok(listing.includes(f), f);
     assert.ok(!listing.includes("package/test/"), "the fixtures stay out of the package");
 

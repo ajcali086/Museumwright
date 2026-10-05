@@ -28,6 +28,13 @@ npm run dev           # the viewer at http://localhost:8000/, the CMS at /admin/
 npm run build         # CMS config, model check, public slice (public/data/museum.json)
 ```
 
+## On a box
+
+The same folders can be served on a LAN, with or without the web, by
+`npx github:ajcali086/Museumwright- serve --museum .`: the viewer for
+visitors at `/`, and a curator's desk at `/desk/` (passcode) that adds,
+decides, checks, commits on the box, and syncs with GitHub when online.
+
 ## The viewer
 
 `public/index.html` (with `viewer.js` and `viewer.css`) is a plain page

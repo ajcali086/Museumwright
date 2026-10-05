@@ -4,6 +4,7 @@
  *   mw init <name> [--repo owner/name] [--title "..."] [--dir path] [--no-install] [--no-git]
  *   mw pull <url> [--propose] [--model-url URL] [--max-width 3000] [--no-skip-log] [--museum dir]
  *   mw batch <folder> [--propose] [--model-url URL] [--no-skip-log] [--museum dir]
+ *   mw serve [--museum dir] [--port 8080] [--host 0.0.0.0] [--state dir] [--model-url URL]
  *
  * pull and batch write into the museum repository at --museum (default:
  * the current directory), then run its model check.
@@ -20,7 +21,8 @@ import { RunLog } from "./util.ts";
 const USAGE = `usage:
   mw init <name> [--repo owner/name] [--title "..."] [--dir path] [--no-install] [--no-git]
   mw pull <url> [--propose] [--model-url URL] [--max-width N] [--no-skip-log] [--museum dir]
-  mw batch <folder> [--propose] [--model-url URL] [--no-skip-log] [--museum dir]`;
+  mw batch <folder> [--propose] [--model-url URL] [--no-skip-log] [--museum dir]
+  mw serve [--museum dir] [--port 8080] [--host 0.0.0.0] [--state dir] [--model-url URL]`;
 
 function parseArgs(argv: string[]) {
   const pos: string[] = [];
@@ -49,10 +51,34 @@ function check(dir: string, log: RunLog): number {
   return r.status ?? 1;
 }
 
+/** The museum box: the viewer for the LAN, the desk for the curator. Runs until stopped. */
+async function serve(flags: Record<string, string | boolean>): Promise<number> {
+  const { networkInterfaces } = await import("node:os");
+  const { createMuseumServer } = await import("./serve/server.ts");
+  const str = (k: string) => (typeof flags[k] === "string" ? (flags[k] as string) : undefined);
+  const port = Number(str("port") ?? process.env.PORT ?? 8080);
+  const host = str("host") ?? "0.0.0.0";
+  const { server, desk, dir } = createMuseumServer({ museum: str("museum") ?? "museum", state: str("state"), modelUrl: str("model-url") });
+  await new Promise<void>((ok) => server.listen(port, host, ok));
+  const actual = (server.address() as { port: number }).port;
+  const lan = Object.values(networkInterfaces())
+    .flat()
+    .filter((i) => i && i.family === "IPv4" && !i.internal)
+    .map((i) => `http://${i!.address}:${actual}/`);
+  console.log(`museum: ${dir}`);
+  console.log(`state:  ${desk.dir}`);
+  console.log(`visitors: http://localhost:${actual}/${lan.length ? `  ${lan.join("  ")}` : ""}`);
+  console.log(`desk:     http://localhost:${actual}/desk/`);
+  if (!desk.configured) console.log(`desk setup code: ${desk.setupCode}  (type it at the desk once, with the passcode you choose)`);
+  await new Promise(() => undefined);
+  return 0;
+}
+
 async function main() {
   const [cmd, ...rest] = process.argv.slice(2);
   const { pos, flags } = parseArgs(rest);
   const log = new RunLog();
+  if (cmd === "serve" && !flags.help) return serve(flags);
   if (!cmd || flags.help || !pos[0]) {
     console.log(USAGE);
     return cmd ? 1 : 0;
