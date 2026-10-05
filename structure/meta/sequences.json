@@ -1,0 +1,5 @@
+{
+  "record": { "prefix": "r-", "width": 4, "next": 1 },
+  "correction": { "prefix": "c-", "width": 4, "next": 1 },
+  "claims": {}
+}

@@ -1,0 +1,30 @@
+{
+  "name": "museumwright",
+  "version": "0.1.0",
+  "private": true,
+  "description": "mw: writes the folders a museum's admin already edits, from a URL or a folder.",
+  "type": "module",
+  "bin": {
+    "mw": "bin/mw.mjs"
+  },
+  "engines": {
+    "node": ">=22.6"
+  },
+  "scripts": {
+    "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test --test-concurrency=1 test/*.test.ts",
+    "typecheck": "tsc -p ."
+  },
+  "dependencies": {
+    "linkedom": "0.18.13",
+    "yaml": "2.9.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "typescript": "^5.9.3"
+  },
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ajcali086/Museumwright-.git"
+  }
+}
