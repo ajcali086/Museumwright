@@ -67,7 +67,7 @@ collections:
         label: Kind
         hint: "text: the passage or caption as it should read. name: a name the span spells."
         widget: select
-        options: [text, name]
+        options: [text, name, contradiction, question, gap, duplicate, link]
         default: text
       - name: target
         label: Span (passage or caption)
@@ -78,6 +78,44 @@ collections:
         label: As it should read, or the name as spelled
         hint: A text correction is the whole passage or caption. A name is spelled exactly as the span spells it.
         widget: text
+      - name: cites
+        label: Citations (every kind but text and name)
+        hint: Words each span holds, quoted exactly. No citation, no acceptance.
+        widget: list
+        required: false
+        summary: "{{fields.span}} · {{fields.quote | truncate(50)}}"
+        fields:
+          - { name: span, label: Span, widget: select, options: "@text" }
+          - { name: quote, label: Quote, widget: text }
+      - name: question
+        label: The question (question proposals)
+        widget: object
+        required: false
+        collapsed: auto
+        fields:
+          - { name: text, label: Question, widget: text }
+          - { name: record, label: Raised by, widget: select, options: "@records" }
+      - name: gap
+        label: The gap (gap proposals)
+        widget: object
+        required: false
+        collapsed: auto
+        fields:
+          - { name: record, label: Record, widget: select, options: "@records" }
+          - { name: missing, label: What is missing between, widget: text }
+      - name: pair
+        label: The two records (duplicate and link proposals)
+        widget: object
+        required: false
+        collapsed: auto
+        fields:
+          - { name: a, label: One, widget: select, options: "@records" }
+          - { name: b, label: The other, widget: select, options: "@records" }
+      - name: basis
+        label: What they share (link proposals)
+        widget: select
+        options: [shared name, shared place, shared date]
+        required: false
       - name: entity_kind
         label: Name of a (name proposals)
         widget: select
@@ -325,6 +363,71 @@ collections:
           format: YYYY-MM-DD,
           default: "{{now}}",
         }
+      - { name: from_proposal, label: Kept from (proposal), widget: hidden, required: false }
+
+  - name: both_stand
+    label: Both Stand
+    label_singular: Both Stand entry
+    description: >-
+      Disagreements standing: two claims, each cited word for word, neither resolved by the museum.
+      Settled only with a note saying how.
+    folder: src/model/both-stand
+    format: json
+    extension: json
+    publish_mode: simple
+    identifier_field: id
+    slug: { template: "{{fields.id}}", editable: false }
+    summary: "{{fields.title}} · {{fields.status}}"
+    delete: false
+    fields:
+      - {
+          name: id,
+          label: ID,
+          widget: string,
+          pattern: ["^[a-z0-9]+(-[a-z0-9]+)*$", "Lowercase words joined by hyphens"],
+        }
+      - { name: title, label: Title, widget: string }
+      - name: claim_a
+        label: One claim
+        widget: object
+        fields:
+          - { name: span, label: Span, widget: select, options: "@text" }
+          - { name: quote, label: Its words, widget: text }
+      - name: claim_b
+        label: The other
+        widget: object
+        fields:
+          - { name: span, label: Span, widget: select, options: "@text" }
+          - { name: quote, label: Its words, widget: text }
+      - { name: status, label: Status, widget: select, options: [standing, settled], default: standing }
+      - { name: settled_note, label: How it was settled, widget: text, required: false }
+      - { name: opened_by, label: Opened by, widget: string, default: "{{author-login}}" }
+      - { name: opened_on, label: Opened on, widget: datetime, type: date, format: YYYY-MM-DD, default: "{{now}}" }
+      - { name: from_proposal, label: Kept from (proposal), widget: hidden, required: false }
+
+  - name: links
+    label: Links
+    label_singular: Link
+    description: Quiet doors between records ("Also"), each basis cited on both sides.
+    file: src/model/links.json
+    publish_mode: simple
+    identifier_field: id
+    summary: "{{fields.id}} · {{fields.from}} → {{fields.to}} · {{fields.basis}}"
+    delete: false
+    fields:
+      - { name: id, label: ID, widget: string, pattern: ["^ln-\\d{3,}$", "Like ln-001"] }
+      - { name: from, label: From, widget: select, options: "@records" }
+      - { name: to, label: To, widget: select, options: "@records" }
+      - { name: basis, label: What they share, widget: select, options: [shared name, shared place, shared date] }
+      - name: cites
+        label: Where each side says so
+        widget: list
+        fields:
+          - { name: span, label: Span, widget: select, options: "@text" }
+          - { name: quote, label: Quote, widget: text }
+      - { name: curator, widget: hidden, default: "{{author-login}}" }
+      - { name: date, label: Linked on, widget: datetime, type: date, format: YYYY-MM-DD, default: "{{now}}" }
+      - { name: from_proposal, label: Kept from (proposal), widget: hidden, required: false }
 
   - name: evidence
     label: Evidence

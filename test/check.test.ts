@@ -128,8 +128,51 @@ describe("check:model", () => {
 
   refuses("a public slice that reaches the queue", (d) => {
     const p = join(d, "scripts/lib/public.ts");
-    write(d, "scripts/lib/public.ts", readFileSync(p, "utf8").replace('"src/model/questions"] as const', '"src/model/questions", "src/data/corrections"] as const'));
+    write(d, "scripts/lib/public.ts", readFileSync(p, "utf8").replace('"src/model/both-stand"] as const', '"src/model/both-stand", "src/data/corrections"] as const'));
   }, /lists the queue or meta\//);
+
+  // Proposal kinds: the span rule over every citation, and what a kept one must leave.
+  const kind = (d: string, data: Record<string, unknown>) =>
+    write(d, "src/data/corrections/c-0002.json", { id: "c-0002", target: "r-0001#p1", proposed_text: "x", reason: "r", proposed_by: "mw", date: "2026-10-04", status: "proposed", ...data });
+  const decided = { decided_by: "curator", decided_on: "2026-10-05" };
+
+  it("passes a contradiction whose claims are in their spans, word for word", () => {
+    const d = seeded();
+    kind(d, { kind: "contradiction", cites: [{ span: "r-0001#p1", quote: "in 1833" }, { span: "plate:r-0002", quote: "London" }] });
+    assert.equal(check(d).code, 0, check(d).out);
+  });
+
+  refuses("a contradiction quoting words its span doesn't hold", (d) =>
+    kind(d, { kind: "contradiction", cites: [{ span: "r-0001#p1", quote: "in 1834" }, { span: "plate:r-0002", quote: "London" }] }),
+  /r-0001#p1 doesn't contain "in 1834"/);
+
+  refuses("a kept contradiction no Both Stand entry carries", (d) =>
+    kind(d, { kind: "contradiction", cites: [{ span: "r-0001#p1", quote: "in 1833" }, { span: "plate:r-0002", quote: "London" }], status: "accepted", ...decided }),
+  /kept, but no Both Stand entry carries it/);
+
+  refuses("a question raised by no record", (d) =>
+    kind(d, { kind: "question", cites: [{ span: "r-0001#p1", quote: "in 1833" }], question: { text: "Where?", record: "r-0099" } }),
+  /raised by r-0099, no such record/);
+
+  refuses("a gap that cites one end of its chain", (d) =>
+    kind(d, { kind: "gap", cites: [{ span: "r-0001#p1", quote: "in 1833" }], gap: { record: "r-0001", missing: "the years after" } }),
+  /a gap cites both ends of its chain/);
+
+  refuses("a link cited on one side only", (d) =>
+    kind(d, { kind: "link", cites: [{ span: "r-0001#p1", quote: "London" }, { span: "r-0001#p1", quote: "in 1833" }], pair: { a: "r-0001", b: "r-0002" }, basis: "shared place" }),
+  /cites no span on both sides/);
+
+  refuses("a merged duplicate with neither record retired", (d) =>
+    kind(d, { kind: "duplicate", cites: [{ span: "r-0001#p1", quote: "London" }, { span: "plate:r-0002", quote: "London" }], pair: { a: "r-0001", b: "r-0002" }, status: "applied", ...decided }),
+  /merged, but neither record is retired/);
+
+  refuses("a Both Stand entry settled with no note", (d) =>
+    write(d, "src/model/both-stand/when.json", { id: "when", title: "When?", claim_a: { span: "r-0001#p1", quote: "in 1833" }, claim_b: { span: "plate:r-0002", quote: "London" }, status: "settled", opened_by: "c", opened_on: "2026-10-05" }),
+  /settled, with no note saying how/);
+
+  refuses("a link whose basis isn't in its span", (d) =>
+    write(d, "src/model/links.json", [{ id: "ln-001", from: "r-0001", to: "r-0002", basis: "shared place", cites: [{ span: "r-0001#p1", quote: "Paris" }, { span: "plate:r-0002", quote: "London" }], curator: "c", date: "2026-10-05" }]),
+  /r-0001#p1 doesn't contain "Paris"/);
 
   refuses("a text correction that changes nothing", (d) =>
     write(d, "src/data/corrections/c-0002.json", { id: "c-0002", target: "plate:r-0002", proposed_text: "The Analytical Engine, London.", reason: "r", proposed_by: "x", date: "2026-10-05", status: "proposed" }),

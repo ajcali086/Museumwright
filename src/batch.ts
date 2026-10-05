@@ -13,6 +13,7 @@ import { readPdf } from "./pdf.ts";
 import { documentItem, imageItem, logItem, type Provenance } from "./records.ts";
 import { commit, type Item, type Outcome } from "./repo.ts";
 import { propose, type Span } from "./propose.ts";
+import type { Kind } from "./records.ts";
 import { bytesHash, inputHash, normalize, runInstant, sniff, type RunLog } from "./util.ts";
 
 const TEXT = new Set([".txt", ".md", ".log"]);
@@ -27,7 +28,7 @@ function walk(dir: string): string[] {
     });
 }
 
-export type BatchOptions = { skipLog?: boolean; propose?: boolean; modelUrl?: string };
+export type BatchOptions = { skipLog?: boolean; propose?: boolean; modelUrl?: string; kinds?: Kind[] };
 
 export async function batch(dir: string, folder: string, opts: BatchOptions, log: RunLog): Promise<Outcome> {
   const at = runInstant();
@@ -37,6 +38,7 @@ export async function batch(dir: string, folder: string, opts: BatchOptions, log
   const spans: Span[] = [];
   const skipped: string[] = [];
   const seen = new Set<string>();
+  const titles = new Map<string, string>();
 
   for (const path of walk(root)) {
     const file = relative(root, path);
@@ -64,6 +66,7 @@ export async function batch(dir: string, folder: string, opts: BatchOptions, log
       }
       const passages = pages.flatMap((p) => ("paragraphs" in p ? p.paragraphs.map((text, i) => ({ id: `p${p.page}-${i + 1}`, text })) : []));
       plan.push(documentItem({ hash, label: file, title: basename(path), credit: "", passages, prov, media: { bytes, ext: "pdf" } }));
+      titles.set(hash, basename(path));
       spans.push(...passages.map((p) => ({ record: hash, span: p.id, text: p.text, prov })));
       let position = 0;
       for (const p of pages) {
@@ -89,6 +92,7 @@ export async function batch(dir: string, folder: string, opts: BatchOptions, log
       const text = Buffer.from(bytes).toString("utf8");
       const passages = text.split(/\n\s*\n/).map(normalize).filter(Boolean).map((t, i) => ({ id: `p${i + 1}`, text: t }));
       plan.push(documentItem({ hash, label: file, title: basename(path), credit: "", passages, prov, media: { bytes, ext: ext.slice(1) } }));
+      titles.set(hash, basename(path));
       spans.push(...passages.map((p) => ({ record: hash, span: p.id, text: p.text, prov })));
     } else {
       skipped.push(`[not a kind this tool reads] ${file}`);
@@ -98,6 +102,6 @@ export async function batch(dir: string, folder: string, opts: BatchOptions, log
   if (skipped.length && !opts.skipLog)
     plan.push(logItem({ hash: inputHash("batch-log", JSON.stringify(skipped)), title: `What the batch skipped: ${basename(root)}`, lines: skipped, prov: { file: ".", extracted_at: at } }));
   log.say(`  ${plan.length} records planned, ${skipped.length} files skipped`);
-  if (opts.propose) plan.push(...(await propose(spans, opts.modelUrl!, log)));
+  if (opts.propose) plan.push(...(await propose(spans, opts.modelUrl!, log, { dir, kinds: opts.kinds, titles })));
   return commit(dir, plan, log);
 }

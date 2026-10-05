@@ -11,8 +11,10 @@ pipeline validates.
 | Records     | `src/model/records`       | `mw pull` / `mw batch` (status `unverified`), or the curator |
 | Entities    | `src/model/entities`      | The curator only, and only with an anchor          |
 | Questions   | `src/model/questions`     | A person                                           |
+| Both Stand  | `src/model/both-stand`    | The curator, keeping a contradiction: both claims, neither resolved |
+| Links       | `src/model/links.json`    | The curator, keeping a link: a door between two records |
 | Evidence    | `src/model/evidence.json` | The curator: a link is a curator's act             |
-| Corrections | `src/data/corrections`    | The curator, or `mw pull --propose` (status `proposed`) |
+| Corrections | `src/data/corrections`    | The curator; and `mw`, which proposes names, contradictions, questions, gaps, duplicates and links (status `proposed`), each citing its spans |
 | Media       | `public/images/uploads`   | The files a pull fetched; each path on its record  |
 
 `meta/sequences.json` holds the IDs claimed, by input hash, so a re-run of

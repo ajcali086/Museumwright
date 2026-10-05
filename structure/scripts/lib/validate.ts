@@ -6,6 +6,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import {
   ENTITY_KINDS,
+  LINK_BASES,
+  PROPOSAL_KINDS,
   loadModel,
   recordText,
   spanRecord,
@@ -25,6 +27,16 @@ const RECORD_STATUSES = ["verified", "unverified", "not-held"];
 const CORRECTION_STATUSES = ["proposed", "accepted", "applied", "rejected", "held"];
 
 type Check = { name: string; run: (m: Model, base: URL) => string[] };
+
+/**
+ * A decided proposal citing a record since retired (merged into another,
+ * say) is history: its citation stands. One still undecided does not, and
+ * keeps the record from being retired until the curator decides it.
+ */
+const retiredSpan = (m: Model) => {
+  const dead = new Set((m.tombstones ?? []).map((t) => t.id));
+  return (c: { status: string }, span: string | undefined) => !!span && c.status !== "proposed" && dead.has(spanRecord(span));
+};
 
 /** A sequence-shaped ID's number, or undefined if the ID isn't one of the sequence's. */
 function seqNumber(seq: Sequence, id: string): number | undefined {
@@ -51,6 +63,7 @@ export const checks: Check[] = [
       ...m.files.questions.flatMap(({ file, data }) => fail(file === `${data.id}.json`, `questions/${file}: ID ${data.id}`)),
       ...m.files.corrections.flatMap(({ file, data }) => fail(file === `${data.id}.json`, `corrections/${file}: ID ${data.id}`)),
       ...m.files.entities.flatMap(({ file, data }) => fail(file === `${data.slug}.json`, `entities/${file}: slug ${data.slug}`)),
+      ...m.files.bothStand.flatMap(({ file, data }) => fail(file === `${data.id}.json`, `both-stand/${file}: ID ${data.id}`)),
     ],
   },
   {
@@ -193,9 +206,10 @@ export const checks: Check[] = [
     name: "each correction targets a span, says what, why, who and when, and is decided once it leaves the queue",
     run: (m) => {
       const text = spans(m.records);
+      const gone = retiredSpan(m);
       return m.corrections.flatMap((c) => [
-        ...fail(["text", "name", undefined].includes(c.kind), `${c.id}: kind ${c.kind}`),
-        ...fail(text.has(c.target), `${c.id}: ${c.target} is no span`),
+        ...fail(c.kind === undefined || PROPOSAL_KINDS.includes(c.kind), `${c.id}: kind ${c.kind}`),
+        ...((c.kind ?? "text") === "text" || c.kind === "name" ? fail(text.has(c.target) || gone(c, c.target), `${c.id}: ${c.target} is no span`) : []),
         ...fail(CORRECTION_STATUSES.includes(c.status), `${c.id}: status ${c.status}`),
         ...fail(!!c.proposed_text?.trim(), `${c.id}: nothing proposed`),
         ...fail(!!c.reason?.trim(), `${c.id}: no reason`),
@@ -203,7 +217,7 @@ export const checks: Check[] = [
         ...fail(iso.test(c.date ?? ""), `${c.id}: date ${c.date}`),
         // A text correction proposes words the span doesn't read yet; once applied, the span reads
         // them, and the correction keeps the words they replaced.
-        ...(c.kind !== "name" && text.has(c.target)
+        ...((c.kind ?? "text") === "text" && text.has(c.target)
           ? c.status === "applied"
             ? [
                 ...fail(c.proposed_text === text.get(c.target), `${c.id}: applied, but ${c.target} doesn't read as corrected`),
@@ -225,7 +239,7 @@ export const checks: Check[] = [
     run: (m) => {
       const text = spans(m.records);
       return m.corrections
-        .filter((c) => c.kind === "name")
+        .filter((c) => c.kind === "name" && !retiredSpan(m)(c, c.target))
         .flatMap((c) => {
           const span = text.get(c.target);
           const record = spanRecord(c.target);
@@ -239,6 +253,111 @@ export const checks: Check[] = [
               : []),
           ];
         });
+    },
+  },
+  {
+    name: "every other kind of proposal cites its spans word for word, names what exists, and leaves what it says once kept",
+    run: (m) => {
+      const text = spans(m.records);
+      const isRecord = (id: string | undefined) => !!id && m.records.some((r) => r.id === id);
+      const dead = new Set((m.tombstones ?? []).map((t) => t.id));
+      return m.corrections
+        .filter((c) => c.kind && !["text", "name"].includes(c.kind))
+        .flatMap((c) => {
+          const cites = c.cites ?? [];
+          // The span rule, generalized: no citation, no acceptance; a quote its span doesn't hold is refused at any status.
+          const citing = cites.flatMap((x, i) => {
+            if (retiredSpan(m)(c, x?.span)) return [];
+            const words = text.get(x?.span);
+            if (words === undefined) return [`${c.id}: citation ${i + 1} cites ${x?.span}, no such span`];
+            return fail(!!x.quote && words.includes(x.quote), `${c.id}: ${x.span} doesn't contain "${x.quote}"`);
+          });
+          const sides = (a?: string, b?: string) => [
+            ...fail(isRecord(a) || dead.has(a ?? ""), `${c.id}: no record ${a}`),
+            ...fail(isRecord(b) || dead.has(b ?? ""), `${c.id}: no record ${b}`),
+            ...fail(!!a && a !== b, `${c.id}: a pair is two records`),
+            ...fail(cites.some((x) => spanRecord(x.span) === a) && cites.some((x) => spanRecord(x.span) === b), `${c.id}: cites no span on both sides`),
+          ];
+          const kept = c.status === "accepted";
+          const k = c.kind!;
+          return [
+            ...citing,
+            ...fail(!!c.proposed_text?.trim(), `${c.id}: no summary line`),
+            ...(c.status === "applied" && k !== "duplicate" ? [`${c.id}: a ${k} is kept (accepted), not applied`] : []),
+            ...(k === "contradiction"
+              ? [
+                  ...fail(cites.length === 2 && cites[0].span + cites[0].quote !== cites[1].span + cites[1].quote, `${c.id}: a contradiction is two claims, each cited`),
+                  ...(kept ? fail(m.bothStand.some((b) => b.from_proposal === c.id), `${c.id}: kept, but no Both Stand entry carries it`) : []),
+                ]
+              : []),
+            ...(k === "question"
+              ? [
+                  ...fail(!!c.question?.text?.trim(), `${c.id}: no question`),
+                  ...fail(isRecord(c.question?.record), `${c.id}: raised by ${c.question?.record}, no such record`),
+                  ...(kept ? fail(m.questions.some((q) => q.from_proposal === c.id), `${c.id}: kept, but no question was opened from it`) : []),
+                ]
+              : []),
+            ...(k === "gap"
+              ? [
+                  ...fail(isRecord(c.gap?.record), `${c.id}: no record ${c.gap?.record}`),
+                  ...fail(!!c.gap?.missing?.trim(), `${c.id}: says nothing of what is missing`),
+                  ...fail(cites.length >= 2, `${c.id}: a gap cites both ends of its chain`),
+                  ...(kept ? fail(m.questions.some((q) => q.from_proposal === c.id), `${c.id}: kept, but no question was opened against ${c.gap?.record}`) : []),
+                ]
+              : []),
+            ...(k === "duplicate"
+              ? [
+                  ...sides(c.pair?.a, c.pair?.b),
+                  // Kept is a merge pending at the desk; applied, one of the two is retired.
+                  ...(c.status === "applied" ? fail(dead.has(c.pair?.a ?? "") || dead.has(c.pair?.b ?? ""), `${c.id}: merged, but neither record is retired`) : []),
+                ]
+              : []),
+            ...(k === "link"
+              ? [
+                  ...sides(c.pair?.a, c.pair?.b),
+                  ...fail(LINK_BASES.includes(c.basis as (typeof LINK_BASES)[number]), `${c.id}: basis ${c.basis}`),
+                  ...(kept ? fail(m.links.some((l) => l.from_proposal === c.id), `${c.id}: kept, but no link carries it`) : []),
+                ]
+              : []),
+          ];
+        });
+    },
+  },
+  {
+    name: "each Both Stand entry cites both claims word for word, and is settled only with a note",
+    run: (m) => {
+      const text = spans(m.records);
+      const ids = new Set(m.corrections.map((c) => c.id));
+      return m.bothStand.flatMap((b) => [
+        ...fail(/^[a-z0-9]+(-[a-z0-9]+)*$/.test(b.id ?? ""), `${b.id}: malformed`),
+        ...fail(!!b.title?.trim(), `${b.id}: no title`),
+        ...[b.claim_a, b.claim_b].flatMap((x, i) => {
+          const words = text.get(x?.span);
+          return words === undefined ? [`${b.id}: claim ${i ? "b" : "a"} cites ${x?.span}, no such span`] : fail(!!x.quote && words.includes(x.quote), `${b.id}: ${x.span} doesn't contain "${x.quote}"`);
+        }),
+        ...fail(["standing", "settled"].includes(b.status), `${b.id}: status ${b.status}`),
+        ...(b.status === "settled" ? fail(!!b.settled_note?.trim(), `${b.id}: settled, with no note saying how`) : []),
+        ...fail(!!b.opened_by?.trim() && iso.test(b.opened_on ?? ""), `${b.id}: who opened it and when`),
+        ...(b.from_proposal ? fail(ids.has(b.from_proposal), `${b.id}: from ${b.from_proposal}, no such proposal`) : []),
+      ]);
+    },
+  },
+  {
+    name: "each link joins two records on a basis cited on both sides",
+    run: (m) => {
+      const text = spans(m.records);
+      const isRecord = (id: string) => m.records.some((r) => r.id === id);
+      return [
+        ...dupes(m.links.map((l) => l.id)).map((id) => `link ${id}: duplicate`),
+        ...m.links.flatMap((l) => [
+          ...fail(/^ln-\d{3,}$/.test(l.id ?? ""), `${l.id}: malformed`),
+          ...fail(isRecord(l.from) && isRecord(l.to) && l.from !== l.to, `${l.id}: joins ${l.from} and ${l.to}`),
+          ...fail(LINK_BASES.includes(l.basis), `${l.id}: basis ${l.basis}`),
+          ...fail((l.cites ?? []).some((x) => spanRecord(x.span) === l.from) && (l.cites ?? []).some((x) => spanRecord(x.span) === l.to), `${l.id}: its basis isn't cited on both sides`),
+          ...(l.cites ?? []).flatMap((x) => fail(text.get(x.span)?.includes(x.quote) ?? false, `${l.id}: ${x.span} doesn't contain "${x.quote}"`)),
+          ...fail(!!l.curator?.trim() && iso.test(l.date ?? ""), `${l.id}: who and when`),
+        ]),
+      ];
     },
   },
   {

@@ -8,13 +8,21 @@
  */
 import { readFolder, readJson } from "./files.ts";
 
-export const PUBLIC_FOLDERS = ["src/model/records", "src/model/entities", "src/model/questions"] as const;
-export const PUBLIC_FILES = ["src/model/museum.json", "src/model/evidence.json"] as const;
+export const PUBLIC_FOLDERS = ["src/model/records", "src/model/entities", "src/model/questions", "src/model/both-stand"] as const;
+export const PUBLIC_FILES = ["src/model/museum.json", "src/model/evidence.json", "src/model/links.json"] as const;
+
+/** Where an entry came from in the queue is the desk's business: it is left out, so no proposal's ID reaches a visitor. */
+const unqueued = (rows: unknown[]) =>
+  rows.map((r) => {
+    if (!r || typeof r !== "object") return r;
+    const { from_proposal: _from, ...rest } = r as Record<string, unknown>;
+    return rest;
+  });
 
 export function publicSlice(base: URL) {
-  const [records, entities, questions] = PUBLIC_FOLDERS.map((dir) =>
+  const [records, entities, questions, bothStand] = PUBLIC_FOLDERS.map((dir) =>
     readFolder(base, dir).map((f) => f.data),
   );
-  const [museum, evidence] = PUBLIC_FILES.map((path) => readJson<unknown>(base, path, null));
-  return { museum, records, entities, questions, evidence };
+  const [museum, evidence, links] = PUBLIC_FILES.map((path) => readJson<unknown>(base, path, null));
+  return { museum, records, entities, questions: unqueued(questions), evidence, bothStand: unqueued(bothStand), links: unqueued((links as unknown[]) ?? []) };
 }

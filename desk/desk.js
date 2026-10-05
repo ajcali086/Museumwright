@@ -73,6 +73,21 @@ function highlighted(text, name) {
   return [text.slice(0, at), h("mark", {}, name), text.slice(at + name.length)];
 }
 
+/** Several quotes marked in one text, in the order they appear. */
+function markAll(text, quotes) {
+  if (!text) return h("span", { class: "quiet" }, "(the span isn't in the museum)");
+  const hits = quotes.map((q) => [text.indexOf(q), q]).filter(([i]) => i >= 0).sort((a, b) => a[0] - b[0]);
+  const out = [];
+  let at = 0;
+  for (const [i, q] of hits) {
+    if (i < at) continue;
+    out.push(text.slice(at, i), h("mark", {}, q));
+    at = i + q.length;
+  }
+  out.push(text.slice(at));
+  return out;
+}
+
 /** Lines added and removed, by the longest common run: what the repository will say. */
 function lineDiff(before, after) {
   const a = before === null ? [] : before.split("\n");
@@ -195,7 +210,7 @@ function create() {
 
 function queue() {
   // Waiting: undecided, and accepted text corrections not yet applied.
-  const waiting = (q) => q.status === "proposed" || (q.kind !== "name" && q.status === "accepted");
+  const waiting = (q) => q.status === "proposed" || (q.status === "accepted" && ((q.kind ?? "text") === "text" || q.kind === "duplicate"));
   const groups = { proposed: waiting, held: (q) => q.status === "held", decided: (q) => !waiting(q) && q.status !== "held" };
   const rows = S.queue.filter(groups[queueFilter]);
   const tabs = h("div", { class: "tabs" }, Object.keys(groups).map((g) =>
@@ -217,15 +232,21 @@ function queue() {
       h("div", {},
         h("div", {}, h("span", { class: "name" }, q.proposed_text), q.entity_kind ? h("span", { class: "chip" }, q.entity_kind) : null, h("span", { class: "chip" }, q.kind ?? "text"),
           h("span", { class: `chip${q.status === "accepted" ? " good" : q.status === "rejected" ? " bad" : ""}` }, q.status), h("span", { class: "meta" }, ` ${q.id}`)),
-        q.kind === "name"
+        NEW_KINDS.includes(q.kind)
+          ? kindBody(q)
+          : q.kind === "name"
           ? h("blockquote", { class: "span" }, highlighted(q.span.text, q.proposed_text))
           : [h("div", { class: "meta" }, q.status === "applied" ? "Read before" : "Reads now"), h("blockquote", { class: "span" }, q.status === "applied" ? q.original_text : q.span.text ?? "(the span isn't in the museum)"),
              h("div", { class: "meta" }, q.status === "applied" ? "Reads now" : "Should read"), h("blockquote", { class: "span" }, q.proposed_text),
              h("div", { class: "meta" }, `Why: ${q.reason}`)],
-        h("div", { class: "meta" }, `${q.span.kind === "caption" ? "Caption of" : "Passage of"} `, h("a", { href: `#/records/${q.span.record}` }, q.span.recordTitle ?? q.span.record), ` (${q.span.key}) · noticed by ${q.proposed_by}${src.model ? ` with ${src.model}` : ""} on ${q.date}`,
+        NEW_KINDS.includes(q.kind)
+          ? h("div", { class: "meta" }, `Noticed by ${q.proposed_by}${src.model ? ` with ${src.model}` : ""} on ${q.date}`, q.decided_by ? ` · ${q.status} by ${q.decided_by} on ${q.decided_on}` : "")
+          : h("div", { class: "meta" }, `${q.span.kind === "caption" ? "Caption of" : "Passage of"} `, h("a", { href: `#/records/${q.span.record}` }, q.span.recordTitle ?? q.span.record), ` (${q.span.key}) · noticed by ${q.proposed_by}${src.model ? ` with ${src.model}` : ""} on ${q.date}`,
           q.decided_by ? ` · ${q.status} by ${q.decided_by} on ${q.decided_on}` : ""),
+        NEW_KINDS.includes(q.kind) && !q.holds ? h("div", { class: "refusal" }, "The span rule: a citation isn't in its span, word for word, so it can't be kept.") : null,
+        NEW_KINDS.includes(q.kind) ? kindActions(q, slot, open) : null,
         q.kind === "name" && !q.holds ? h("div", { class: "refusal" }, `The span rule: ${q.span.key} doesn't contain “${q.proposed_text}”, so it can't be kept.`) : null,
-        q.kind !== "name" && (open || q.status === "accepted")
+        (q.kind ?? "text") === "text" && (open || q.status === "accepted")
           ? h("div", { class: "actions" },
               q.status === "accepted"
                 ? h("button", { type: "button", class: "primary", onclick: (e) => previewThenWrite(slot, "apply", { id: q.id }, e.currentTarget) }, "Apply it…")
@@ -245,7 +266,7 @@ function queue() {
   });
   return [
     h("h1", {}, "Queue"),
-    h("p", { class: "quiet" }, "Names the machine noticed, each in the span that spells it, and corrections to the text. A proposal is not an entity: keep it, hold it back, or reject it. A correction is accepted, then applied. Nothing here reaches the museum's visitors."),
+    h("p", { class: "quiet" }, "What the machine noticed, each cited in the words that say it: names, contradictions, questions, gaps, duplicates, links; and corrections to the text. The machine proposes; you keep or hold back. Nothing here reaches the museum's visitors."),
     tabs,
     queueFilter === "decided" || !rows.length ? null : [bulk, bulkSlot],
     rows.length ? list : h("p", { class: "quiet" }, queueFilter === "proposed" ? "Nothing is waiting. Add a page or files, with names proposed, to fill the queue." : "Nothing here."),
@@ -272,6 +293,119 @@ function keepPanel(slot, q) {
     previewThenWrite(out, "keep", { id: q.id, as }, e.submitter);
   });
   slot.replaceChildren(form);
+}
+
+/* ── the newer kinds: each shown in its own shape ─────────────── */
+
+const NEW_KINDS = ["contradiction", "question", "gap", "duplicate", "link"];
+
+/** One citation: the record it's from, the span, and the quoted words marked in it. */
+function cited(c) {
+  if (!c) return null;
+  return h("div", { class: "cited" },
+    h("div", { class: "meta" }, h("a", { href: `#/records/${c.record}` }, c.recordTitle ?? c.record), ` · ${c.span}`),
+    h("blockquote", { class: "span" }, highlighted(c.text, c.quote)));
+}
+
+/** One side of a pair: the record (its picture, if it has one) and the words cited from it. */
+function pairCard(id, c) {
+  const r = S.records.find((x) => x.id === id);
+  const img = r && (r.media ?? []).find((m) => /\.(jpe?g|png|gif|webp|avif)$/i.test(m));
+  return h("div", { class: "card pair" },
+    img ? h("img", { class: "thumb", src: img, alt: "" }) : null,
+    h("div", {}, r ? h("a", { href: `#/records/${id}` }, r.title) : `${id} (retired)`, h("span", { class: "meta mono" }, ` ${id}`)),
+    r?.credit ? h("div", { class: "meta" }, r.credit) : null,
+    c ? h("blockquote", { class: "span" }, highlighted(c.text, c.quote)) : null);
+}
+
+function kindBody(q) {
+  const cs = q.citations ?? [];
+  if (q.kind === "contradiction") return [h("div", { class: "meta" }, "Two claims that can't both stand:"), h("div", { class: "grid2" }, cs.map(cited))];
+  if (q.kind === "question") return [h("p", { class: "ask" }, q.question?.text), h("div", { class: "meta" }, "Raised by:"), cs.map(cited)];
+  if (q.kind === "gap") {
+    const hole = h("div", { class: "hole" }, `⋯ ${q.gap?.missing} ⋯`);
+    // Both ends in one passage: shown once, the two ends marked, the hole named after it.
+    if (cs[0] && cs[1] && cs[0].span === cs[1].span)
+      return [h("div", { class: "meta" }, "A chain, and the hole in it:"),
+        h("div", { class: "cited" }, h("div", { class: "meta" }, h("a", { href: `#/records/${cs[0].record}` }, cs[0].recordTitle ?? cs[0].record), ` · ${cs[0].span}`),
+          h("blockquote", { class: "span" }, markAll(cs[0].text, [cs[0].quote, cs[1].quote]))), hole];
+    return [h("div", { class: "meta" }, "A chain, and the hole in it:"), cited(cs[0]), hole, cited(cs[1])];
+  }
+  if (q.kind === "duplicate" || q.kind === "link")
+    return [h("div", { class: "meta" }, q.kind === "duplicate" ? "Maybe one thing, recorded twice:" : `Connected: ${q.basis}`),
+      h("div", { class: "grid2" }, [q.pair?.a, q.pair?.b].map((id) => pairCard(id, cs.find((c) => c.record === id))))];
+  return null;
+}
+
+const QUESTION_KEEP = [
+  { name: "title", label: "The question", required: true },
+  { name: "what_we_know", label: "What we know", type: "textarea", required: true },
+  { name: "what_we_dont", label: "What we don't", type: "textarea", required: true },
+  { name: "what_might_answer_it", label: "What might answer it", type: "textarea", required: true },
+  { name: "evidence_needed", label: "Evidence needed", type: "textarea", required: true },
+];
+
+function kindActions(q, slot, open) {
+  const hold = (label) => q.status === "proposed" ? h("button", { type: "button", onclick: (e) => previewThenWrite(slot, "decide", { ids: [q.id], status: "held" }, e.currentTarget) }, label) : null;
+  const reject = h("button", { type: "button", class: "danger", onclick: (e) => previewThenWrite(slot, "decide", { ids: [q.id], status: "rejected" }, e.currentTarget) }, "Reject");
+  if (q.kind === "duplicate" && q.status === "accepted")
+    return h("div", { class: "actions" }, h("span", { class: "meta" }, "Marked for merging. Merge, keeping:"),
+      [q.pair.a, q.pair.b].map((id) => h("button", { type: "button", class: "primary", onclick: (e) => previewThenWrite(slot, "merge", { id: q.id, keep: id }, e.currentTarget) }, `${id}…`)));
+  if (!open) return null;
+  const keepWith = (label, panel) => h("button", { type: "button", class: "primary", disabled: !q.holds, onclick: () => slot.replaceChildren(panel()) }, label);
+  const direct = (label) => h("button", { type: "button", class: "primary", disabled: !q.holds, onclick: (e) => previewThenWrite(slot, "keep", { id: q.id }, e.currentTarget) }, label);
+  if (q.kind === "contradiction")
+    return h("div", { class: "actions" }, keepWith("Let both stand…", () => {
+      const out = h("div");
+      const form = h("form", { class: "panel" }, h("label", { class: "field" }, h("span", {}, "The Both Stand entry's title"), h("input", { type: "text", name: "title", value: q.proposed_text })),
+        h("div", { class: "actions" }, h("button", { type: "submit", class: "primary" }, "Show the change")), out);
+      form.addEventListener("submit", (e) => { e.preventDefault(); previewThenWrite(out, "keep", { id: q.id, title: new FormData(form).get("title") }, e.submitter); });
+      return form;
+    }), hold("Not a conflict"), reject);
+  if (q.kind === "question" || q.kind === "gap") {
+    const prefill = q.kind === "question"
+      ? { title: q.question?.text, what_we_dont: q.question?.text }
+      : { title: `What happened between “${q.citations?.[0]?.quote}” and “${q.citations?.[1]?.quote}”?`, what_we_dont: q.gap?.missing };
+    return h("div", { class: "actions" }, keepWith("Open a question…", () => {
+      const out = h("div");
+      const form = h("form", { class: "panel" }, QUESTION_KEEP.map((f) => field(f, prefill[f.name])), h("div", { class: "actions" }, h("button", { type: "submit", class: "primary" }, "Show the change")), out);
+      form.addEventListener("submit", (e) => { e.preventDefault(); previewThenWrite(out, "keep", { id: q.id, question: readForm(form, QUESTION_KEEP) }, e.submitter); });
+      return form;
+    }), hold("Hold back"), reject);
+  }
+  if (q.kind === "duplicate") return h("div", { class: "actions" }, direct("Mark for merging…"), hold("They're distinct"), reject);
+  if (q.kind === "link") return h("div", { class: "actions" }, direct("Add the link…"), hold("Don't link"), reject);
+  return null;
+}
+
+/* ── Both Stand: disagreements standing ───────────────────────── */
+
+/** A span's words, from the records the desk has. */
+function spanText(key) {
+  const [rid, pid] = key.startsWith("plate:") ? [key.slice(6), null] : key.split("#");
+  const r = S.records.find((x) => x.id === rid);
+  if (!r) return null;
+  return pid ? (r.passages ?? []).find((p) => p.id === pid)?.text ?? null : r.caption ?? "";
+}
+
+function bothStand() {
+  const entries = S.bothStand ?? [];
+  return [
+    h("h1", {}, `Both Stand (${entries.length})`),
+    h("p", { class: "quiet" }, "Disagreements the museum lets stand: two claims, each cited in its own words, neither resolved. One is settled only with a note saying how."),
+    entries.length ? entries.map((b) => {
+      const slot = h("div");
+      const settle = h("form", { class: "panel" }, h("label", { class: "field" }, h("span", {}, "How it was settled (the record found, the reading that explains it)"), h("textarea", { name: "note", required: true })),
+        h("div", { class: "actions" }, h("button", { type: "submit" }, "Settle it…")), slot);
+      settle.addEventListener("submit", (e) => { e.preventDefault(); previewThenWrite(slot, "settle", { id: b.id, note: new FormData(settle).get("note") }, e.submitter); });
+      const claim = (c) => cited({ ...c, text: spanText(c.span), record: c.span.startsWith("plate:") ? c.span.slice(6) : c.span.split("#")[0], recordTitle: null });
+      return h("article", { class: "card", id: b.id },
+        h("div", { class: "head-row" }, h("h2", {}, b.title), h("span", { class: `chip${b.status === "settled" ? " good" : ""}` }, b.status)),
+        h("div", { class: "grid2" }, claim(b.claim_a), claim(b.claim_b)),
+        h("div", { class: "meta" }, `Opened by ${b.opened_by} on ${b.opened_on}${b.from_proposal ? `, from ${b.from_proposal}` : ""}`),
+        b.status === "settled" ? h("p", {}, h("strong", {}, "Settled: "), b.settled_note) : settle);
+    }) : h("p", { class: "quiet" }, "None yet. A contradiction kept from the queue opens one."),
+  ];
 }
 
 /* ── adding to the archive ────────────────────────────────────── */
@@ -787,12 +921,12 @@ function render() {
   const [, tab = "queue", arg] = location.hash.replace(/^#/, "").split("/").map(decodeURIComponent);
   document.getElementById("museum-title").textContent = S.museum.title;
   document.getElementById("who").textContent = S.who;
-  document.getElementById("queue-count").textContent = String(S.queue.filter((q) => q.status === "proposed" || (q.kind !== "name" && q.status === "accepted")).length || "");
+  document.getElementById("queue-count").textContent = String(S.queue.filter((q) => q.status === "proposed" || (q.status === "accepted" && ((q.kind ?? "text") === "text" || q.kind === "duplicate"))).length || "");
   const dot = document.getElementById("check-dot");
   dot.className = `dot ${S.check.ok ? "ok" : "bad"}`;
   dot.title = S.check.ok ? "The check passes" : "The check finds problems";
   for (const a of document.querySelectorAll("#nav a")) a.dataset.tab === tab ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current");
-  const screens = { queue, add, records, entities, questions, evidence, check: checkDesk, site, sync, ids };
+  const screens = { queue, add, records, entities, questions, "both-stand": bothStand, evidence, check: checkDesk, site, sync, ids };
   const nodes = (screens[tab] ?? queue)(arg);
   view.replaceChildren(...[nodes].flat(Infinity).filter(Boolean));
   document.title = `${tab[0].toUpperCase()}${tab.slice(1)} · ${S.museum.title} · Desk`;

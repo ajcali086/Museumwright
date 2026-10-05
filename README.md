@@ -9,20 +9,50 @@ Built to the Starter Spec v2 (2026-10-04). The structure it generates was
 learned from [The Spirit of Martinez](https://github.com/ajcali086/spirit-of-martinez)'s
 workbench and the Angie pilot.
 
-```bash
-npx github:ajcali086/Museumwright- init <name> [--repo owner/name] [--title "..."] [--dir path] [--no-install] [--no-git]
-npx github:ajcali086/Museumwright- pull <url>     [--propose] [--model-url URL] [--max-width 3000] [--no-skip-log] [--museum dir]
-npx github:ajcali086/Museumwright- batch <folder> [--propose] [--model-url URL] [--no-skip-log] [--museum dir]
-```
-
-Installed from git, npm builds `dist/` (plain JavaScript) on install,
-because Node won't strip types from files under `node_modules`. In a
-checkout, `bin/mw.mjs` runs `src/` directly:
+## Install, and the five commands
 
 ```bash
-npm ci
-bin/mw.mjs init <name> ...
+npm install -g github:ajcali086/Museumwright-     # puts mw on the PATH
+mw doctor                                        # first: is this box ready?
 ```
+
+```
+mw new            start a museum (asks a few questions)
+mw pull <url>     bring in a web page
+mw add <folder>   bring in files: photos, PDFs, text
+mw desk           open the curator's desk on this box's network
+mw sync           trade commits with GitHub
+
+mw doctor         check this box has what mw needs
+```
+
+No flags are needed: each has a default, and `mw <command> --help` shows
+examples first. A refusal is said in plain words, with what to do next;
+`--verbose` shows the rest. `npx github:ajcali086/Museumwright- <command>`
+works without installing.
+
+- **`mw new`** asks the museum's name, title and GitHub repository, lists
+  every file it will write, and asks before writing them. It then runs
+  init's steps and ends with the check green. Passing a name, `--repo` and
+  `--yes` skips the questions, for scripts.
+- **`mw pull`** proposes names on its own when a local model answers at
+  `MW_MODEL_URL` (default `http://127.0.0.1:8080`). With no model it says
+  so in one line and goes on (`--no-propose` to skip asking).
+- **`mw pull` and `mw add`, in a museum with a git history,** commit what
+  the check lets stand, as the desk does. If the check refuses, nothing is
+  kept.
+- **`mw desk`** serves this folder's museum, or creates one at `./museum`
+  from the desk. It prints the network addresses and, on first run, the
+  setup code, and stays up until Ctrl+C.
+- **`mw sync`** only fast-forwards, and says which happened: sent, took,
+  already in step, or "both sides moved", with the commands that settle
+  it.
+- **`mw doctor`** checks Node.js (22.6+), git, poppler, the local model,
+  free disk and the museum here (its check, its GitHub remote). For
+  anything missing, it prints the command that fixes it.
+
+The older names still work for scripts: `init`, `batch`, `serve`. In a
+checkout of this repository, run `npm ci` and then `bin/mw.mjs …`.
 
 Node 22.6 or later (type stripping). `batch` reads PDFs with poppler
 (`pdfinfo`, `pdftotext`, `pdftoppm`).
@@ -179,31 +209,51 @@ caption; a file's bytes), and `claims` maps that hash to its ID, so:
 - a tombstoned ID (`meta/tombstones.json`) is never reissued, and its
   input is not re-created.
 
-## `--propose`
+## What the machine may propose
 
-Writes the names a local model notices, as proposal files **in the
-corrections shape**: `kind: name`, `status: proposed`, `target` the span
-(`r-0001#p9`, or `plate:r-0004` for a caption), `proposed_text` the name
-as spelled. A proposal is not an entity.
+Proposal Kinds Spec v1. **The machine proposes, the human disposes.** The
+local model writes nothing but proposals in the queue
+(`src/data/corrections`, status `proposed`), and the curator keeps each
+one or holds it back.
 
-The worker is Qwen3-1.7B (Apache 2.0), GGUF Q4_K_M, under llama.cpp:
+Every proposal cites its spans: the words it stands on, quoted.
+**No citation, no acceptance.** A proposal whose quote isn't in its span,
+word for word, is dropped before it is written; `check:model` refuses one
+that reaches the queue anyway, and the desk refuses to keep it, quoting
+the span.
+
+| Kind | What it says | Kept, it becomes | Held back, it means |
+|---|---|---|---|
+| `name` | a name, as a span spells it | an entity anchored to that record | not an entity (yet) |
+| `contradiction` | two claims in conflict, each cited | a **Both Stand** entry: both claims, neither resolved | a considered non-conflict |
+| `question` | something missing, raised by a record | an open question; it closes only on evidence | not asked |
+| `gap` | a hole in a chain: both ends cited, what's missing between | an open question against the record | not asked |
+| `duplicate` | two records that may be one thing twice | a merge pending at the desk. The merge itself is the curator's act: one record retired, a dated note on the other | the two are distinct |
+| `link` | a shared name, place or date, cited on both sides | a quiet door ("Also") between the two records | never rendered |
+| `text` | a correction, the span as it should read | accepted, then applied; the old words kept | unchanged |
+
+No kind proposes a deletion, a merge, a publication or a change to the
+config.
+
+**The worker** is Qwen3-1.7B (Apache 2.0), GGUF Q4_K_M, under llama.cpp:
 
 ```bash
 llama-server -hf Qwen/Qwen3-1.7B-GGUF:Q4_K_M --port 8080
-bin/mw.mjs pull <url> --propose            # or --model-url / MW_MODEL_URL
+mw pull <url>        # proposes on its own when the model answers (MW_MODEL_URL, --model-url)
 ```
 
-Generation is constrained by a GBNF grammar to the proposal's fields
-(`src/propose.ts`), temperature 0 and a fixed seed. **The span rule**: a
-name its span doesn't contain, exactly as spelled, is dropped before it is
-written, and `check:model` refuses one that reaches the queue anyway. If
-no model answers, the run completes with an empty pile and the run log
-says so.
+Each kind has its own prompt and a GBNF grammar that allows only that
+kind's fields (`src/propose.ts`, `src/kinds.ts`), at temperature 0 with a
+fixed seed. Names are asked per span. Contradictions are asked over all
+the spans a run brings in. Questions and gaps are asked per record.
+Duplicates and links are asked over a catalogue of the museum's records,
+and each pair must include one from this run. If no model answers, the
+run completes with an empty pile and the log says so.
 
-In the admin, **kept** means: create the entity, anchored to the record
-that spells the name, then mark the proposal `accepted`; the check refuses
-a kept name with no entity anchored there. **Held back** is status
-`held`: a decision, not a deletion (`delete: false`).
+**The Both Stand register** (`src/model/both-stand/`) holds what the
+museum lets stand. An entry is settled only with a note saying how.
+**Links** (`src/model/links.json`) are the doors between records. Both
+reach the public slice, without the ID of the proposal they came from.
 
 ## The generated museum's check
 
@@ -212,11 +262,14 @@ not named for its ID; a held record with nothing held; a record `mw`
 wrote whose input hash doesn't claim it; an ID claimed twice or
 tombstoned and in use; an entity with no anchor, or with none that
 spells its name; an evidence quote not verbatim in its span; a
-contradiction no question carries; a name proposal whose span doesn't
-contain it; a kept name with no anchored entity; and a public slice that
+contradiction no question carries; any proposal citing words its span doesn't hold; a kept name with no
+anchored entity, a kept contradiction with no Both Stand entry, a kept
+question, gap or link with nothing opened from it; a merged duplicate
+with neither record retired; a Both Stand entry settled with no note; and a public slice that
 could read the queue. The public slice (`scripts/lib/public.ts`, written
 to `public/data/museum.json` by `npm run build`) reads records,
-entities, questions, evidence and the museum record, and nothing else:
+entities, questions, evidence, Both Stand, links and the museum record,
+and nothing else:
 the check holds that file to its list, so a proposal has no path to the
 public render.
 
@@ -235,7 +288,7 @@ reaches it. Not a theme (spec §7); a museum replaces it when it has one.
 ## Tests
 
 ```bash
-npm test         # 89 tests, offline
+npm test         # 122 tests, offline
 npm run typecheck
 ```
 
@@ -268,6 +321,15 @@ npm run typecheck
   Site.
 - `test/desk.test.ts` builds a museum from nothing through the desk in
   Chromium, from the setup code to the viewer showing the kept name.
+- `test/kinds.test.ts` and `test/kinds-desk.test.ts` cover proposal kinds.
+  A stand-in model proposes one of each kind on the Angie page, plus some
+  with quotes their spans don't hold. The tests check generation and the
+  span rule, then each kind kept or held back at the desk (a Both Stand
+  entry, questions, a link, a merge) and in Chromium.
+- `test/shell.test.ts` drives the five commands and the doctor as a
+  curator would: the overview, help, plain refusals, `mw new`, pull and
+  add committing, sync (sent, took, in step, both moved), the desk's
+  printout, and the old names.
 - `test/install.test.ts` packs the package, installs it into a scratch
   project, and runs `mw init` from `node_modules`.
 

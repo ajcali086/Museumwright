@@ -45,7 +45,7 @@ describe("the Angie test", () => {
 
   it("runs, and the build passes before anyone marks a name kept", () => {
     assert.equal(first.code, 0, first.out);
-    assert.match(first.out, /model check passed/);
+    assert.match(first.out, /check passes/);
     const built = run(dir, "scripts/cms-build.ts");
     assert.equal(built.code, 0, built.out);
   });
@@ -134,7 +134,7 @@ describe("the Angie test", () => {
     const before = tree(dir);
     const again = await mw(["pull", `${site.url}/post/angie`, "--propose", "--model-url", model.url, "--museum", dir], { MW_NOW: "2026-10-05T09:30:00Z" });
     assert.equal(again.code, 0, again.out);
-    assert.match(again.out, /claimed 0 new IDs/);
+    assert.match(again.out, /claimed 0 new IDs/i);
     assert.deepEqual(tree(dir), before);
   });
 

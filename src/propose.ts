@@ -12,7 +12,9 @@
  * refused by check:model if it ever reaches the queue. If no model is
  * reachable, the pile is empty and the run log says so.
  */
+import { NEW_KINDS, proposeKinds } from "./kinds.ts";
 import { inputHash, type RunLog } from "./util.ts";
+import type { Kind } from "./records.ts";
 import { nameItem, type Provenance } from "./records.ts";
 import type { Item } from "./repo.ts";
 
@@ -58,31 +60,38 @@ export async function reach(base: string): Promise<{ model: string } | { why: st
   }
 }
 
-export async function namesIn(base: string, text: string): Promise<Name[]> {
+/** One completion, constrained by a grammar, parsed. */
+export async function complete(base: string, text: string, grammar: string): Promise<Record<string, unknown>> {
   const res = await fetch(`${base}/completion`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    signal: AbortSignal.timeout(120_000),
-    body: JSON.stringify({
-      prompt: prompt(text.slice(0, 4000)),
-      grammar: GRAMMAR,
-      temperature: 0,
-      seed: 42,
-      n_predict: 768,
-      cache_prompt: true,
-    }),
+    signal: AbortSignal.timeout(180_000),
+    body: JSON.stringify({ prompt: text, grammar, temperature: 0, seed: 42, n_predict: 1024, cache_prompt: true }),
   });
   if (!res.ok) throw new Error(`/completion: ${res.status}`);
   const { content } = (await res.json()) as { content: string };
-  const parsed = JSON.parse(content) as { names: Name[] };
-  return parsed.names.filter((n) => typeof n?.name === "string" && KINDS.includes(n.kind));
+  return JSON.parse(content) as Record<string, unknown>;
+}
+
+export async function namesIn(base: string, text: string): Promise<Name[]> {
+  const parsed = (await complete(base, prompt(text.slice(0, 4000)), GRAMMAR)) as { names?: Name[] };
+  return (parsed.names ?? []).filter((n) => typeof n?.name === "string" && KINDS.includes(n.kind));
 }
 
 /** The span rule: kept only if the span contains the name exactly as the model wrote it. */
 export const spanHolds = (span: string, name: string) => name.trim().length > 1 && span.includes(name.trim());
 
-/** Proposal items for every span. An empty pile, logged, if no model answers. */
-export async function propose(spans: Span[], base: string, log: RunLog): Promise<Item[]> {
+export type ProposeOptions = {
+  /** The museum, for proposals across its records (duplicates, links). */
+  dir?: string;
+  /** Which kinds to ask for besides names (default: every kind). */
+  kinds?: Kind[];
+  /** Each run record's title, by input hash, for the catalogue the model reads. */
+  titles?: Map<string, string>;
+};
+
+/** Proposal items for every span, of every kind. An empty pile, logged, if no model answers. */
+export async function propose(spans: Span[], base: string, log: RunLog, opts: ProposeOptions = {}): Promise<Item[]> {
   const reached = await reach(base);
   if ("why" in reached) {
     log.say(`propose: ${reached.why}; the pile is empty`);
@@ -112,5 +121,15 @@ export async function propose(spans: Span[], base: string, log: RunLog): Promise
     return [];
   }
   log.say(`propose: ${items.length} names noticed; ${dropped} dropped by the span rule (not in their span as spelled)`);
-  return items;
+  const kinds = opts.kinds ?? NEW_KINDS;
+  if (!kinds.length) return items;
+  try {
+    const more = await proposeKinds({ spans, ask: (p, g) => complete(base, p, g), model: reached.model, dir: opts.dir, kinds, titles: opts.titles });
+    const count = (k: string) => more.items.filter((i) => i.label === `${k} proposal`).length;
+    log.say(`propose: ${kinds.map((k) => `${count(k)} ${k}${count(k) === 1 ? "" : "s"}`).join(", ")}; ${more.dropped} dropped by the span rule (a quote not in its span)`);
+    return [...items, ...more.items];
+  } catch (e) {
+    log.say(`propose: the model failed on the other kinds (${(e as Error).message}); only the names are kept`);
+    return items;
+  }
 }

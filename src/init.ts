@@ -21,7 +21,7 @@ import { slugify, type RunLog } from "./util.ts";
 export const STRUCTURE = fileURLToPath(new URL("../structure/", import.meta.url));
 
 const FOLDERS = ["src/model/records", "src/model/entities", "src/model/questions", "src/data/corrections", "public/images/uploads", "meta"];
-const UNIVERSAL = ["corrections", "records", "entities", "questions", "evidence"];
+const UNIVERSAL = ["corrections", "records", "entities", "questions", "both_stand", "links", "evidence"];
 
 /** Which step writes a structure file. */
 function stepOf(path: string): 1 | 2 | 3 | 4 {

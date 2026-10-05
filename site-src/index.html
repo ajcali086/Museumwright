@@ -21,19 +21,20 @@
         <a class="button" href="https://github.com/ajcali086/Museumwright-">The code</a>
       </p>
 
-      <h2>On a box, for a museum</h2>
-      <pre><code>npx github:ajcali086/Museumwright- serve --museum ./museum --port 80</code></pre>
-      <p>Visitors on the network see the museum. The curator signs in to the desk at <code>/desk/</code> and builds the archive from nothing, in three stages:</p>
+      <h2>Install, then five commands</h2>
+      <pre><code>npm install -g github:ajcali086/Museumwright-
+mw doctor          # is this box ready? what's missing, and the command that fixes it</code></pre>
+      <pre><code>mw new            start a museum (asks a few questions)
+mw pull &lt;url&gt;     bring in a web page
+mw add &lt;folder&gt;   bring in files: photos, PDFs, text
+mw desk           open the curator's desk on this box's network
+mw sync           trade commits with GitHub</code></pre>
+      <p>No flags needed; every refusal in plain words. <code>mw desk</code> prints the address to open and, the first time, a setup code. Visitors on the network see the museum; the curator builds the archive at the desk, in three stages:</p>
       <ol>
         <li><strong>Collection.</strong> Create the museum; add a page from the web, files from the box, or photographs from a phone.</li>
         <li><strong>Archival work.</strong> Decide the names a local model noticed, each shown in the words that spell it; catalogue, correct, link evidence, open questions, retire. Every change is shown before it is written, and the museum's own check decides whether it stays.</li>
         <li><strong>Site.</strong> What visitors see, rebuilt after every change; the history in git on the box, sent to GitHub when the web is there.</li>
       </ol>
-
-      <h2>From a terminal</h2>
-      <pre><code>npx github:ajcali086/Museumwright- init "The Mill Museum" --repo you/mill-museum
-npx github:ajcali086/Museumwright- pull https://… --propose --museum mill-museum
-npx github:ajcali086/Museumwright- batch ./box-3 --museum mill-museum</code></pre>
 
       <h2>What it holds to</h2>
       <ul>

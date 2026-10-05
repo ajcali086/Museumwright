@@ -9,6 +9,7 @@ import { fetchBytes, fetchText } from "./fetch.ts";
 import { documentItem, imageItem, logItem, type Provenance } from "./records.ts";
 import { commit, type Item, type Outcome } from "./repo.ts";
 import { propose, type Span } from "./propose.ts";
+import type { Kind } from "./records.ts";
 import { bytesHash, imageSize, inputHash, runInstant, sniff, type RunLog } from "./util.ts";
 
 export type PullOptions = {
@@ -16,6 +17,8 @@ export type PullOptions = {
   skipLog?: boolean;
   propose?: boolean;
   modelUrl?: string;
+  /** Which kinds besides names to propose (default: every kind). */
+  kinds?: Kind[];
   /** Images smaller than this on both sides are decoration (icons, spacers, tracking pixels). */
   minSide?: number;
 };
@@ -38,6 +41,7 @@ export async function pull(dir: string, url: string, opts: PullOptions, log: Run
     documentItem({ hash: docHash, label: `page "${ex.title}"`, title: ex.title || page.url, credit: ex.author, passages, prov }),
   ];
   const spans: Span[] = passages.map((p) => ({ record: docHash, span: p.id, text: p.text, prov }));
+  const titles = new Map([[docHash, ex.title || page.url]]);
   const skipped = ex.skipped.map((s) => `[${s.where}] ${s.text}`);
 
   const seenBytes = new Set<string>();
@@ -91,12 +95,13 @@ export async function pull(dir: string, url: string, opts: PullOptions, log: Run
       }),
     );
     if (block.caption) spans.push({ record: hash, span: "caption", text: block.caption, prov });
+    titles.set(hash, `Plate ${position}`);
   }
 
   if (skipped.length && !opts.skipLog)
     plan.push(logItem({ hash: inputHash("page-log", docHash), title: `What the pull skipped: ${ex.title || page.url}`, parent: docHash, lines: skipped, prov }));
   log.say(`  ${passages.length} passages, ${position} plates, ${skipped.length} pieces skipped${opts.skipLog ? " (not logged: --no-skip-log)" : ""}`);
 
-  if (opts.propose) plan.push(...(await propose(spans, opts.modelUrl!, log)));
+  if (opts.propose) plan.push(...(await propose(spans, opts.modelUrl!, log, { dir, kinds: opts.kinds, titles })));
   return commit(dir, plan, log);
 }
