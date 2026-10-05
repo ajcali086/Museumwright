@@ -39,23 +39,39 @@ npx github:ajcali086/Museumwright- serve --museum ./museum --port 8080
 - **`/`, for visitors:** the museum's viewer over its public slice, and the
   files it shows. Read-only, no sign-in. Before a museum exists, a page
   saying one is being set up.
-- **`/desk/`, for the curator:** builds the archive from nothing, in the
-  browser.
-  - **Create** a museum (the same `mw init`, verified the same way), or
-    bring one in from GitHub.
-  - **Add** a page from the web (`mw pull`, names proposed by the local
-    model if one is running), or files from a computer or a phone's camera
-    (`mw batch`, with an optional "what this is" that becomes a dated note,
-    never a caption).
-  - **Queue** (the home screen): every proposed name in the span that
-    spells it, marked. Keep it (a new entity, or another name of one the
-    museum has), hold it back, or reject it, one at a time or in bulk.
-  - **Records:** each record's status changes only with a dated note.
-  - **Entities:** with what anchors them, and the records that name nothing
-    yet.
-  - **Check:** `check:model` in plain lines.
-  - **Sync:** GitHub, when the web is there.
-  - **IDs & export:** sequences, tombstones, and the export.
+- **`/desk/`, for the curator:** the museum's own admin, with no GitHub
+  and no Sveltia needed. It builds the archive from nothing, in three
+  stages.
+  1. **Collection.** Create a museum (the same `mw init`, verified the
+     same way), or bring one in from GitHub. Then add to it:
+     - a page from the web (`mw pull`, with names proposed by the local
+       model if one is running);
+     - files from the box or a phone's camera (`mw batch`). An optional
+       "what this is" becomes a dated note, never a caption.
+  2. **Archival work.** Every collection, edited at the desk:
+     - **Queue** (the home screen): proposed names, each marked in the span
+       that spells it. Keep one as a new entity or as another name of an
+       existing one, hold it back, or reject it, singly or in bulk. Text
+       corrections are accepted, then applied.
+     - **Records:** catalogue one by hand (something the museum knows of,
+       its ID from the sequence). Edit a title or rights holder. Propose a
+       correction to any passage or caption. Change a status with a dated
+       note. Retire a record: its ID goes on the tombstones, its files go,
+       and the check refuses while anything still points at it.
+     - **Entities:** make or edit one, with its anchors and the other names
+       it goes by, each with the records that write it so. Also listed:
+       the records that name nothing yet.
+     - **Questions:** open or edit one. It closes only on evidence.
+     - **Evidence:** link a claim to a record. The quote must be in its
+       span word for word, and links are appended, never rewritten.
+     - **Check:** `check:model` in plain lines.
+  3. **Site.** What visitors see now, beside what only the desk sees.
+     Also here: GitHub, which is optional, and IDs & export.
+
+  A source's words (a pulled record's caption, credit and passages) are
+  never edited in place. They change only by a correction that is
+  proposed, accepted and applied. An applied correction keeps the words it
+  replaced, and the check holds that the span then reads as corrected.
 
 Every change at the desk is shown first: the files it will write, before
 and after. Then it is written, and the museum's own `check:model` decides.
@@ -219,7 +235,7 @@ reaches it. Not a theme (spec §7); a museum replaces it when it has one.
 ## Tests
 
 ```bash
-npm test         # 73 tests, offline
+npm test         # 89 tests, offline
 npm run typecheck
 ```
 
@@ -244,6 +260,12 @@ npm run typecheck
   note, a refused write taken back, uploads with a note, sync against a
   bare repository (push, take, refuse a divergence), export, a restart,
   and bringing a museum in by clone.
+- `test/local-admin.test.ts` builds and edits a museum through the API
+  with no remote: a record by hand, entities, questions, evidence, a
+  correction proposed, accepted and applied, a record retired, each
+  refusal where the rules say no.
+- `test/local-desk.test.ts` does the same in Chromium, from Collection to
+  Site.
 - `test/desk.test.ts` builds a museum from nothing through the desk in
   Chromium, from the setup code to the viewer showing the kept name.
 - `test/install.test.ts` packs the package, installs it into a scratch

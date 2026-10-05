@@ -12,7 +12,7 @@
  * the museum's own check:model and committed to its git history on the box.
  * Offline, nothing is lost; online, the same commits go to GitHub.
  */
-import { createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { basename, extname, join, normalize, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -23,6 +23,7 @@ import { pull } from "../pull.ts";
 import { RunLog } from "../util.ts";
 import { apply, check, diffOf, museumScript, planDecide, planKeep, planNote, planStatus, settle, type KeepAs, type Plan } from "./actions.ts";
 import { Desk, DeskError, stateDirFor } from "./auth.ts";
+import { planAddEvidence, planApply, planProposeText, planRetire, planSaveEntity, planSaveQuestion, planSaveRecord } from "./edit.ts";
 import * as G from "./git.ts";
 import { isMuseum, readMuseum, spanRecord, spans } from "./museum.ts";
 
@@ -131,15 +132,32 @@ export function createMuseumServer(opts: ServeOptions) {
           };
         })
         .sort((a, b) => (a.status === "proposed" ? 0 : 1) - (b.status === "proposed" ? 0 : 1) || a.id.localeCompare(b.id, "en", { numeric: true })),
-      records: m.records.map((r) => ({ ...r, passages: undefined, passageCount: (r.passages ?? []).length, media: (r.media ?? []).map((p) => "/" + p.replace(/^public\//, "")) })),
+      records: m.records.map((r) => ({ ...r, passageCount: (r.passages ?? []).length, files: r.media ?? [], media: (r.media ?? []).map((p) => "/" + p.replace(/^public\//, "")) })),
       entities: m.entities,
       unanchored: m.records.filter((r) => (r.kind === "image" || r.kind === "document") && !anchored.has(r.id)).map((r) => r.id),
-      questions: m.questions.length,
-      evidence: m.evidence.length,
+      questions: m.questions,
+      evidence: m.evidence,
+      site: site(),
       ids: { record: m.sequences?.record ?? null, correction: m.sequences?.correction ?? null, claims: Object.keys(m.sequences?.claims ?? {}).length, tombstones: m.tombstones },
       check: { ok: c.ok, problems: c.problems },
       git: { log: G.log(dir), dirty: G.dirty(dir), ...G.sync(dir), repo: s.remote?.repo ?? null, token: !!s.remote?.token },
       modelUrl: opts.modelUrl ?? process.env.MW_MODEL_URL ?? DEFAULT_MODEL_URL,
+    };
+  }
+
+  /** What visitors see right now: the public slice as last built, against the museum as it stands. */
+  function site() {
+    const file = join(dir, "public/data/museum.json");
+    if (!existsSync(file)) return { built: false };
+    const slice = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown[]>;
+    return {
+      built: true,
+      bytes: statSync(file).size,
+      at: statSync(file).mtime.toISOString(),
+      records: slice.records?.length ?? 0,
+      entities: slice.entities?.length ?? 0,
+      questions: slice.questions?.length ?? 0,
+      evidence: slice.evidence?.length ?? 0,
     };
   }
 
@@ -291,7 +309,7 @@ export function createMuseumServer(opts: ServeOptions) {
               const notes = (b.notes ?? {}) as Record<string, string>;
               for (const r of readMuseum(dir).records) {
                 const note = typeof r.source?.file === "string" ? notes[r.source.file as string] : undefined;
-                if (note?.trim() && out.new.includes(r.id)) for (const w of planNote(dir, r.id, `${who}: ${note}`).writes) writeFileSync(join(dir, w.path), w.after);
+                if (note?.trim() && out.new.includes(r.id)) for (const w of planNote(dir, r.id, `${who}: ${note}`).writes) if (!w.delete) writeFileSync(join(dir, w.path), w.after);
               }
             } catch (e) {
               G.discard(dir);
@@ -308,8 +326,8 @@ export function createMuseumServer(opts: ServeOptions) {
             needMuseum();
             const ids = Array.isArray(b.ids) ? (b.ids as string[]) : [];
             if (!ids.length) throw new DeskError(400, "Pick at least one proposal.");
-            const status = b.status === "rejected" ? "rejected" : b.status === "held" ? "held" : undefined;
-            if (!status) throw new DeskError(400, "A decision is held or rejected.");
+            const status = b.status === "rejected" ? "rejected" : b.status === "held" ? "held" : b.status === "accepted" ? "accepted" : undefined;
+            if (!status) throw new DeskError(400, "A decision is accepted, held or rejected.");
             return planned(planDecide(dir, ids, status, who, typeof b.note === "string" ? b.note : undefined), preview, who);
           }
           case "status":
@@ -318,6 +336,25 @@ export function createMuseumServer(opts: ServeOptions) {
           case "note":
             needMuseum();
             return planned(planNote(dir, str(b.id, "the record"), str(b.note, "a note")), preview, who);
+          case "save": {
+            needMuseum();
+            const data = (b.data ?? {}) as Record<string, unknown>;
+            const plan =
+              b.collection === "records" ? planSaveRecord(dir, data)
+              : b.collection === "entities" ? planSaveEntity(dir, data)
+              : b.collection === "questions" ? planSaveQuestion(dir, data, who)
+              : b.collection === "evidence" ? planAddEvidence(dir, data, who)
+              : b.collection === "corrections" ? planProposeText(dir, data, who)
+              : undefined;
+            if (!plan) throw new DeskError(400, "Records, entities, questions, evidence or corrections.");
+            return planned(plan, preview, who);
+          }
+          case "apply":
+            needMuseum();
+            return planned(planApply(dir, str(b.id, "the correction"), who), preview, who);
+          case "retire":
+            needMuseum();
+            return planned(planRetire(dir, str(b.id, "the record"), str(b.reason, "a reason")), preview, who);
           case "check":
             needMuseum();
             return check(dir);

@@ -201,8 +201,15 @@ export const checks: Check[] = [
         ...fail(!!c.reason?.trim(), `${c.id}: no reason`),
         ...fail(!!c.proposed_by?.trim(), `${c.id}: no proposer`),
         ...fail(iso.test(c.date ?? ""), `${c.id}: date ${c.date}`),
+        // A text correction proposes words the span doesn't read yet; once applied, the span reads
+        // them, and the correction keeps the words they replaced.
         ...(c.kind !== "name" && text.has(c.target)
-          ? fail(c.proposed_text !== text.get(c.target), `${c.id}: changes nothing`)
+          ? c.status === "applied"
+            ? [
+                ...fail(c.proposed_text === text.get(c.target), `${c.id}: applied, but ${c.target} doesn't read as corrected`),
+                ...fail(typeof c.original_text === "string", `${c.id}: applied, without the words it replaced`),
+              ]
+            : fail(c.proposed_text !== text.get(c.target), `${c.id}: changes nothing`)
           : []),
         ...(c.status === "proposed"
           ? []

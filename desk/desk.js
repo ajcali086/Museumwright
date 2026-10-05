@@ -194,7 +194,9 @@ function create() {
 /* ── the queue: the home screen ───────────────────────────────── */
 
 function queue() {
-  const groups = { proposed: (q) => q.status === "proposed", held: (q) => q.status === "held", decided: (q) => !["proposed", "held"].includes(q.status) };
+  // Waiting: undecided, and accepted text corrections not yet applied.
+  const waiting = (q) => q.status === "proposed" || (q.kind !== "name" && q.status === "accepted");
+  const groups = { proposed: waiting, held: (q) => q.status === "held", decided: (q) => !waiting(q) && q.status !== "held" };
   const rows = S.queue.filter(groups[queueFilter]);
   const tabs = h("div", { class: "tabs" }, Object.keys(groups).map((g) =>
     h("button", { type: "button", "aria-pressed": String(queueFilter === g), onclick: () => { queueFilter = g; render(); } },
@@ -215,10 +217,22 @@ function queue() {
       h("div", {},
         h("div", {}, h("span", { class: "name" }, q.proposed_text), q.entity_kind ? h("span", { class: "chip" }, q.entity_kind) : null, h("span", { class: "chip" }, q.kind ?? "text"),
           h("span", { class: `chip${q.status === "accepted" ? " good" : q.status === "rejected" ? " bad" : ""}` }, q.status), h("span", { class: "meta" }, ` ${q.id}`)),
-        h("blockquote", { class: "span" }, highlighted(q.span.text, q.kind === "name" ? q.proposed_text : null)),
+        q.kind === "name"
+          ? h("blockquote", { class: "span" }, highlighted(q.span.text, q.proposed_text))
+          : [h("div", { class: "meta" }, q.status === "applied" ? "Read before" : "Reads now"), h("blockquote", { class: "span" }, q.status === "applied" ? q.original_text : q.span.text ?? "(the span isn't in the museum)"),
+             h("div", { class: "meta" }, q.status === "applied" ? "Reads now" : "Should read"), h("blockquote", { class: "span" }, q.proposed_text),
+             h("div", { class: "meta" }, `Why: ${q.reason}`)],
         h("div", { class: "meta" }, `${q.span.kind === "caption" ? "Caption of" : "Passage of"} `, h("a", { href: `#/records/${q.span.record}` }, q.span.recordTitle ?? q.span.record), ` (${q.span.key}) · noticed by ${q.proposed_by}${src.model ? ` with ${src.model}` : ""} on ${q.date}`,
           q.decided_by ? ` · ${q.status} by ${q.decided_by} on ${q.decided_on}` : ""),
         q.kind === "name" && !q.holds ? h("div", { class: "refusal" }, `The span rule: ${q.span.key} doesn't contain “${q.proposed_text}”, so it can't be kept.`) : null,
+        q.kind !== "name" && (open || q.status === "accepted")
+          ? h("div", { class: "actions" },
+              q.status === "accepted"
+                ? h("button", { type: "button", class: "primary", onclick: (e) => previewThenWrite(slot, "apply", { id: q.id }, e.currentTarget) }, "Apply it…")
+                : h("button", { type: "button", class: "primary", onclick: (e) => previewThenWrite(slot, "decide", { ids: [q.id], status: "accepted" }, e.currentTarget) }, "Accept…"),
+              q.status === "proposed" ? h("button", { type: "button", onclick: (e) => previewThenWrite(slot, "decide", { ids: [q.id], status: "held" }, e.currentTarget) }, "Hold back") : null,
+              q.status !== "accepted" ? h("button", { type: "button", class: "danger", onclick: (e) => previewThenWrite(slot, "decide", { ids: [q.id], status: "rejected" }, e.currentTarget) }, "Reject") : null)
+          : null,
         open && q.kind === "name"
           ? h("div", { class: "actions" },
               h("button", { type: "button", class: "primary", disabled: !q.holds, onclick: () => keepPanel(slot, q) }, "Keep…"),
@@ -231,7 +245,7 @@ function queue() {
   });
   return [
     h("h1", {}, "Queue"),
-    h("p", { class: "quiet" }, "Names the machine noticed, each in the span that spells it. A proposal is not an entity: keep it, hold it back, or reject it. Nothing here reaches the museum's visitors."),
+    h("p", { class: "quiet" }, "Names the machine noticed, each in the span that spells it, and corrections to the text. A proposal is not an entity: keep it, hold it back, or reject it. A correction is accepted, then applied. Nothing here reaches the museum's visitors."),
     tabs,
     queueFilter === "decided" || !rows.length ? null : [bulk, bulkSlot],
     rows.length ? list : h("p", { class: "quiet" }, queueFilter === "proposed" ? "Nothing is waiting. Add a page or files, with names proposed, to fill the queue." : "Nothing here."),
@@ -337,10 +351,11 @@ function add() {
 /* ── records ──────────────────────────────────────────────────── */
 
 function records(id) {
+  if (id === "new") return recordNew();
   if (id) return record(id);
   const unanchored = new Set(S.unanchored);
   return [
-    h("h1", {}, `Records (${S.records.length})`),
+    h("div", { class: "head-row" }, h("h1", {}, `Records (${S.records.length})`), h("a", { href: "#/records/new" }, h("button", { type: "button", class: "primary" }, "Catalogue a record"))),
     S.records.length
       ? h("table", { class: "list" }, h("thead", {}, h("tr", {}, ["", "ID", "What", "Status", "Caption"].map((t) => h("th", {}, t)))),
           h("tbody", {}, S.records.map((r) => h("tr", {},
@@ -386,10 +401,12 @@ function record(id) {
         ["Names", names.length ? names.map((e, i) => [i ? ", " : "", h("a", { href: `#/entities/${e.slug}` }, e.label)]) : "nothing yet"]]
         .filter(([, v]) => v !== undefined && v !== "" && !(Array.isArray(v) && !v.length))
         .flatMap(([k, v]) => [h("dt", {}, k), h("dd", {}, v)])),
-    (r.notes ?? []).length ? [h("h2", {}, "Notes"), h("ul", {}, r.notes.map((n) => h("li", {}, h("span", { class: "meta" }, `${n.date} `), n.note)))] : null,
-    r.held ? statusForm : null,
+    (r.notes ?? []).length ? [h("h2", {}, "History"), h("ul", {}, r.notes.map((n) => h("li", {}, h("span", { class: "meta" }, `${n.date} `), n.note)))] : null,
+    r.held ? [h("h2", {}, "Status"), statusForm] : null,
+    h("h2", {}, "Notes"),
     noteForm,
     slot,
+    recordEditors(r),
   ];
 }
 
@@ -397,6 +414,7 @@ function record(id) {
 
 function entities(slug) {
   const byId = new Map(S.records.map((r) => [r.id, r]));
+  if (slug === "new") return entityNew();
   if (slug) {
     const e = S.entities.find((x) => x.slug === slug);
     if (!e) return [h("h1", {}, "Not found")];
@@ -407,11 +425,13 @@ function entities(slug) {
       h("h2", {}, "Anchored by"),
       h("ul", {}, (e.anchors ?? []).map((id) => h("li", {}, h("a", { href: `#/records/${id}` }, byId.get(id)?.title ?? id), " ", h("span", { class: "meta mono" }, id)))),
       h("h2", {}, "Kept from"),
-      h("ul", {}, S.queue.filter((q) => q.status === "accepted" && (q.proposed_text === e.label || (e.aliases ?? []).some((a) => a.name === q.proposed_text))).map((q) => h("li", {}, `“${q.proposed_text}” in ${q.target}, kept by ${q.decided_by} on ${q.decided_on}`))),
+      h("ul", {}, S.queue.filter((q) => q.kind === "name" && q.status === "accepted" && (q.proposed_text === e.label || (e.aliases ?? []).some((a) => a.name === q.proposed_text))).map((q) => h("li", {}, `“${q.proposed_text}” in ${q.target}, kept by ${q.decided_by} on ${q.decided_on}`))),
+      h("h2", {}, "Edit"),
+      editor("entities", ENTITY_FIELDS, e, "Show the change…", { id: e.id }),
     ];
   }
   return [
-    h("h1", {}, `Entities (${S.entities.length})`),
+    h("div", { class: "head-row" }, h("h1", {}, `Entities (${S.entities.length})`), h("a", { href: "#/entities/new" }, h("button", { type: "button", class: "primary" }, "A new entity"))),
     S.entities.length
       ? h("table", { class: "list" }, h("thead", {}, h("tr", {}, ["Name", "Kind", "Anchored by"].map((t) => h("th", {}, t)))),
           h("tbody", {}, S.entities.slice().sort((a, b) => a.label.localeCompare(b.label)).map((e) => h("tr", {},
@@ -491,12 +511,250 @@ function ids() {
       h("dt", {}, "Next record ID"), h("dd", { class: "mono" }, record ? `${record.prefix}${String(record.next).padStart(record.width ?? 4, "0")}` : "—"),
       h("dt", {}, "Next proposal ID"), h("dd", { class: "mono" }, correction ? `${correction.prefix}${String(correction.next).padStart(correction.width ?? 4, "0")}` : "—"),
       h("dt", {}, "Inputs claimed"), h("dd", {}, String(claims)),
-      h("dt", {}, "Questions · evidence links"), h("dd", {}, `${S.questions} · ${S.evidence}`)),
+      h("dt", {}, "Questions · evidence links"), h("dd", {}, `${S.questions.length} · ${S.evidence.length}`)),
     h("h2", {}, `Tombstones (${tombstones.length})`),
     tombstones.length ? h("ul", {}, tombstones.map((t) => h("li", {}, h("span", { class: "mono" }, t.id), ` · ${t.date} · ${t.reason}`))) : h("p", { class: "quiet" }, "No ID has been retired."),
     h("h2", {}, "Export"),
     h("p", { class: "quiet" }, "The museum as committed, every file, as one archive: the preservation copy."),
     h("a", { href: "/desk/api/export", download: true }, h("button", { type: "button", class: "primary" }, "Download the export (.tar.gz)")),
+  ];
+}
+
+/* ── forms: one builder for every collection ──────────────────── */
+
+const clip = (t, n = 60) => {
+  const s = String(t ?? "").replace(/\s+/g, " ").trim();
+  return s.length > n ? `${s.slice(0, n - 1)}…` : s;
+};
+const spanOptions = () =>
+  S.records.flatMap((r) => [
+    ...(r.passages ?? []).map((p) => ({ value: `${r.id}#${p.id}`, label: `${r.id}#${p.id} — ${clip(p.text)}` })),
+    ...(r.kind === "image" || r.caption ? [{ value: `plate:${r.id}`, label: `plate:${r.id} — ${clip(r.caption || "(no caption)")}` }] : []),
+  ]);
+const recordOptions = () => S.records.map((r) => ({ value: r.id, label: `${r.id} · ${clip(r.title, 50)}` }));
+const entityOptions = () => S.entities.map((e) => ({ value: e.id, label: `${e.label} (${e.kind})` }));
+const evidenceOptions = () => S.evidence.map((l) => ({ value: l.id, label: `${l.id} · ${l.type} · ${clip(l.claim?.quote, 40)}` }));
+const ENTITY_KINDS = ["person", "family", "place", "organization", "event"];
+
+/** One field: a text box, a text area, a choice, several choices, or words shown and not editable. */
+function field(f, value) {
+  const label = (control) => h("label", { class: "field" }, h("span", {}, f.label), control, f.hint ? h("span", { class: "meta" }, f.hint) : null);
+  if (f.type === "readonly") return h("div", { class: "field" }, h("span", { class: "meta" }, f.label), h("div", { class: "readonly" }, value || "—"), f.hint ? h("span", { class: "meta" }, f.hint) : null);
+  if (f.type === "textarea") return label(h("textarea", { name: f.name, required: f.required, value: value ?? "" }));
+  if (f.type === "select" || f.type === "multi") {
+    const chosen = new Set([value ?? []].flat());
+    const opts = typeof f.options === "function" ? f.options() : f.options;
+    return label(h("select", { name: f.name, multiple: f.type === "multi", required: f.required },
+      f.type === "select" && !f.required ? h("option", { value: "" }, "—") : null,
+      opts.map((o) => (typeof o === "string" ? { value: o, label: o } : o)).map((o) => h("option", { value: o.value, selected: chosen.has(o.value) }, o.label))));
+  }
+  if (f.type === "aliases") return aliasesField(f, value ?? []);
+  return label(h("input", { type: "text", name: f.name, required: f.required, value: value ?? "" }));
+}
+
+/** Other names, each with the records that write it so. */
+function aliasesField(f, aliases) {
+  const rows = h("div", { class: "aliases" });
+  const add = (a = { name: "", sources: [] }) => {
+    const row = h("div", { class: "alias" },
+      h("input", { type: "text", "data-alias": "name", value: a.name, placeholder: "The name, as written", "aria-label": "Also named" }),
+      h("select", { "data-alias": "sources", multiple: true, "aria-label": "Written so in" }, recordOptions().map((o) => h("option", { value: o.value, selected: (a.sources ?? []).includes(o.value) }, o.label))),
+      h("button", { type: "button", onclick: () => row.remove() }, "Remove"));
+    rows.append(row);
+  };
+  aliases.forEach(add);
+  return h("div", { class: "field", "data-field": f.name }, h("span", {}, f.label), rows, h("button", { type: "button", onclick: () => add() }, "Add a name"));
+}
+
+function readForm(form, fields) {
+  const out = {};
+  for (const f of fields) {
+    if (f.type === "readonly") continue;
+    if (f.type === "aliases") {
+      out[f.name] = [...form.querySelectorAll(`[data-field="${f.name}"] .alias`)].map((row) => ({
+        name: row.querySelector('[data-alias="name"]').value,
+        sources: [...row.querySelector('[data-alias="sources"]').selectedOptions].map((o) => o.value),
+      }));
+      continue;
+    }
+    const el = form.elements.namedItem(f.name);
+    out[f.name] = f.type === "multi" ? [...el.selectedOptions].map((o) => o.value) : el.value;
+  }
+  return out;
+}
+
+/** A form that saves to a collection: shown as a change first, then written and checked. */
+function editor(collection, fields, values, submit, extra = {}) {
+  const slot = h("div");
+  const form = h("form", { class: "card editor" }, fields.map((f) => field(f, values[f.name])), h("div", { class: "actions" }, h("button", { type: "submit", class: "primary" }, submit)), slot);
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    previewThenWrite(slot, "save", { collection, data: { ...extra, ...readForm(form, fields) } }, e.submitter);
+  });
+  return form;
+}
+
+/** Propose a passage or caption as it should read, whole: into the queue, never edited in place. */
+function correctionForm(target, current) {
+  const slot = h("div");
+  const form = h("form", { class: "panel" },
+    h("label", { class: "field" }, h("span", {}, "As it should read, whole"), h("textarea", { name: "proposed_text", required: true, value: current })),
+    h("label", { class: "field" }, h("span", {}, "Why"), h("input", { type: "text", name: "reason", required: true })),
+    h("div", { class: "actions" }, h("button", { type: "submit" }, "Propose the correction…")), slot);
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const f = new FormData(form);
+    previewThenWrite(slot, "save", { collection: "corrections", data: { target, proposed_text: f.get("proposed_text"), reason: f.get("reason") } }, e.submitter);
+  });
+  return form;
+}
+
+function toggle(label, make) {
+  const slot = h("div");
+  return [h("button", { type: "button", class: "link", onclick: () => (slot.firstChild ? slot.replaceChildren() : slot.replaceChildren(make())) }, label), slot];
+}
+
+/* ── records: catalogue by hand, edit, correct, retire ────────── */
+
+const RECORD_NEW = [
+  { name: "title", label: "Title", required: true },
+  { name: "kind", label: "Kind", type: "select", options: ["object", "document", "image"], required: true },
+  { name: "caption", label: "Caption (yours: this record has no source)", type: "textarea" },
+  { name: "credit", label: "Credit" },
+  { name: "alt", label: "Alt text" },
+  { name: "rights_holder", label: "Rights holder", hint: "“unknown” if unknown." },
+];
+
+function recordNew() {
+  return [
+    h("p", { class: "meta" }, h("a", { href: "#/records" }, "Records"), " / new"),
+    h("h1", {}, "Catalogue a record"),
+    h("p", { class: "quiet" }, "Something the museum knows of, entered by hand: not held, until a file of it comes in through Add. Its ID comes from the museum's sequence."),
+    editor("records", RECORD_NEW, { kind: "object", rights_holder: "unknown" }, "Show the record…"),
+  ];
+}
+
+function recordEditors(r) {
+  const sourced = !!r.source;
+  const fields = [
+    { name: "title", label: "Title", required: true },
+    { name: "rights_holder", label: "Rights holder" },
+    sourced ? { name: "caption", label: "Caption (as the source gives it)", type: "readonly" } : { name: "caption", label: "Caption", type: "textarea" },
+    sourced ? { name: "credit", label: "Credit (as the source gives it)", type: "readonly" } : { name: "credit", label: "Credit" },
+    sourced ? null : { name: "alt", label: "Alt text" },
+  ].filter(Boolean);
+  const spansOf = [
+    ...(r.kind === "image" || r.caption ? [{ key: `plate:${r.id}`, label: "Caption", text: r.caption ?? "" }] : []),
+    ...(r.passages ?? []).map((p) => ({ key: `${r.id}#${p.id}`, label: p.id, text: p.text })),
+  ];
+  const retireSlot = h("div");
+  const retire = h("form", { class: "panel" },
+    h("label", { class: "field" }, h("span", {}, "Why it is retired (its ID is never reissued)"), h("input", { type: "text", name: "reason", required: true })),
+    h("div", { class: "actions" }, h("button", { type: "submit", class: "danger" }, "Retire this record…")), retireSlot);
+  retire.addEventListener("submit", (e) => {
+    e.preventDefault();
+    previewThenWrite(retireSlot, "retire", { id: r.id, reason: new FormData(retire).get("reason") }, e.submitter);
+  });
+  return [
+    h("h2", {}, "Edit"),
+    editor("records", fields, r, "Show the change…", { id: r.id }),
+    spansOf.length ? [h("h2", {}, sourced ? "Its words, as the source gives them" : "Its words"),
+      h("p", { class: "meta" }, "A source's words change only by correction: proposed here, decided in the queue, then applied."),
+      spansOf.map((s) => h("div", { class: "passage" }, h("div", { class: "meta mono" }, `${s.key}`), h("div", { class: "readonly" }, s.text || "(empty)"), toggle("Propose a correction", () => correctionForm(s.key, s.text))))] : null,
+    h("h2", {}, "Retire"),
+    retire,
+  ];
+}
+
+/* ── entities ─────────────────────────────────────────────────── */
+
+const ENTITY_FIELDS = [
+  { name: "label", label: "Name as shown", required: true },
+  { name: "kind", label: "Kind", type: "select", options: ENTITY_KINDS, required: true },
+  { name: "anchors", label: "Anchored by (records that spell the name)", type: "multi", options: recordOptions, required: true },
+  { name: "aliases", label: "Also named", type: "aliases" },
+];
+
+function entityNew() {
+  return [
+    h("p", { class: "meta" }, h("a", { href: "#/entities" }, "Entities"), " / new"),
+    h("h1", {}, "A new entity"),
+    h("p", { class: "quiet" }, "Most entities come from the queue. One made here still needs a record that spells its name, or the check refuses it."),
+    editor("entities", ENTITY_FIELDS, { kind: "person" }, "Show the entity…"),
+  ];
+}
+
+/* ── questions ────────────────────────────────────────────────── */
+
+const QUESTION_FIELDS = [
+  { name: "title", label: "The question", required: true },
+  { name: "what_we_know", label: "What we know", type: "textarea", required: true },
+  { name: "what_we_dont", label: "What we don't", type: "textarea", required: true },
+  { name: "what_might_answer_it", label: "What might answer it", type: "textarea", required: true },
+  { name: "evidence_needed", label: "Evidence needed", type: "textarea", required: true },
+  { name: "last_known_source", label: "Rests on", type: "multi", options: recordOptions },
+  { name: "entities", label: "Concerns", type: "multi", options: entityOptions },
+  { name: "evidence", label: "Evidence", type: "multi", options: evidenceOptions, hint: "An answered question needs some; every contradiction must be carried by one." },
+  { name: "status", label: "Status", type: "select", options: ["open", "answered"], required: true },
+];
+
+function questions(id) {
+  if (id === "new")
+    return [h("p", { class: "meta" }, h("a", { href: "#/questions" }, "Questions"), " / new"), h("h1", {}, "Open a question"), editor("questions", QUESTION_FIELDS, { status: "open" }, "Show the question…")];
+  if (id) {
+    const q = S.questions.find((x) => x.id === id);
+    if (!q) return [h("h1", {}, "Not found")];
+    return [h("p", { class: "meta" }, h("a", { href: "#/questions" }, "Questions"), " / ", q.id), h("h1", {}, q.title), h("p", { class: "meta" }, `Opened by ${q.curator} on ${q.date} · ${q.status}`), editor("questions", QUESTION_FIELDS, q, "Show the change…", { id: q.id })];
+  }
+  return [
+    h("div", { class: "head-row" }, h("h1", {}, `Questions (${S.questions.length})`), h("a", { href: "#/questions/new" }, h("button", { type: "button", class: "primary" }, "Open a question"))),
+    h("p", { class: "quiet" }, "Bounded questions: what we know, what we don't, what might answer it. One closes only on evidence; none is deleted."),
+    S.questions.length
+      ? h("table", { class: "list" }, h("tbody", {}, S.questions.map((q) => h("tr", {}, h("td", {}, h("a", { href: `#/questions/${q.id}` }, q.title)), h("td", {}, h("span", { class: `chip${q.status === "answered" ? " good" : ""}` }, q.status)), h("td", { class: "meta" }, `${(q.evidence ?? []).length} evidence`)))))
+      : h("p", { class: "quiet" }, "No questions yet."),
+  ];
+}
+
+/* ── evidence ─────────────────────────────────────────────────── */
+
+const EVIDENCE_FIELDS = [
+  { name: "span", label: "The claim: a passage or caption", type: "select", options: spanOptions, required: true },
+  { name: "quote", label: "Its words, exactly as they appear there", type: "textarea", required: true },
+  { name: "record", label: "The record that bears on it", type: "select", options: recordOptions, required: true },
+  { name: "type", label: "How it bears on it", type: "select", options: ["supports", "contradicts", "qualifies"], required: true },
+  { name: "note", label: "What it says", type: "textarea" },
+];
+
+function evidence() {
+  const byId = new Map(S.records.map((r) => [r.id, r]));
+  return [
+    h("h1", {}, `Evidence (${S.evidence.length})`),
+    h("p", { class: "quiet" }, "A claim linked to a record: supports, contradicts or qualifies. Appended, never rewritten; a contradiction must be carried by an open question."),
+    S.evidence.length
+      ? h("table", { class: "list" }, h("tbody", {}, S.evidence.map((l) => h("tr", {}, h("td", { class: "mono" }, l.id), h("td", {}, `“${clip(l.claim?.quote, 80)}”`, h("div", { class: "meta" }, l.claim?.span)), h("td", {}, h("span", { class: "chip" }, l.type)), h("td", {}, h("a", { href: `#/records/${l.record}` }, byId.get(l.record)?.title ?? l.record)), h("td", { class: "meta" }, `${l.curator} · ${l.date}`)))))
+      : h("p", { class: "quiet" }, "No evidence links yet."),
+    h("h2", {}, "Link evidence"),
+    S.records.length ? editor("evidence", EVIDENCE_FIELDS, { type: "supports" }, "Show the link…") : h("p", { class: "quiet" }, "Add records first."),
+  ];
+}
+
+/* ── the site: what visitors see ──────────────────────────────── */
+
+function site() {
+  const st = S.site;
+  const waiting = S.queue.filter((q) => q.status === "proposed").length;
+  const stat = (n, label) => h("div", { class: "card" }, h("div", { class: "stat" }, String(n)), h("div", { class: "meta" }, label));
+  return [
+    h("div", { class: "head-row" }, h("h1", {}, "Site"), h("a", { href: "/", target: "_blank", rel: "noopener" }, h("button", { type: "button", class: "primary" }, "Open the museum ↗"))),
+    h("p", { class: "quiet" }, "What visitors on this network see, built from the museum after every change the check lets stand. The queue never reaches it."),
+    st.built
+      ? [h("h2", {}, "Visitors see"), h("div", { class: "stats" }, stat(st.records, "records"), stat(st.entities, "entities"), stat(st.questions, "questions"), stat(st.evidence, "evidence links")),
+          h("p", { class: "meta" }, `Built ${st.at.slice(0, 16).replace("T", " ")} · ${Math.ceil(st.bytes / 1024)} KB`)]
+      : h("p", { class: "refusal" }, "The site isn't built yet."),
+    h("h2", {}, "Only the desk sees"),
+    h("div", { class: "stats" }, stat(waiting, "proposals waiting"), stat(S.queue.filter((q) => q.status === "held").length, "held back"), stat(S.unanchored.length, "records naming nothing yet")),
+    h("h2", {}, "Beyond this box"),
+    h("p", { class: "quiet" }, "Nothing here needs the web. To publish beyond the network, send the museum to GitHub from the GitHub desk, or take the export."),
   ];
 }
 
@@ -529,12 +787,12 @@ function render() {
   const [, tab = "queue", arg] = location.hash.replace(/^#/, "").split("/").map(decodeURIComponent);
   document.getElementById("museum-title").textContent = S.museum.title;
   document.getElementById("who").textContent = S.who;
-  document.getElementById("queue-count").textContent = String(S.queue.filter((q) => q.status === "proposed").length || "");
+  document.getElementById("queue-count").textContent = String(S.queue.filter((q) => q.status === "proposed" || (q.kind !== "name" && q.status === "accepted")).length || "");
   const dot = document.getElementById("check-dot");
   dot.className = `dot ${S.check.ok ? "ok" : "bad"}`;
   dot.title = S.check.ok ? "The check passes" : "The check finds problems";
   for (const a of document.querySelectorAll("#nav a")) a.dataset.tab === tab ? a.setAttribute("aria-current", "page") : a.removeAttribute("aria-current");
-  const screens = { queue, add, records, entities, check: checkDesk, sync, ids };
+  const screens = { queue, add, records, entities, questions, evidence, check: checkDesk, site, sync, ids };
   const nodes = (screens[tab] ?? queue)(arg);
   view.replaceChildren(...[nodes].flat(Infinity).filter(Boolean));
   document.title = `${tab[0].toUpperCase()}${tab.slice(1)} · ${S.museum.title} · Desk`;

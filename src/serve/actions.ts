@@ -8,19 +8,20 @@
  */
 import { randomBytes } from "node:crypto";
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { slugify } from "../util.ts";
 import { DeskError } from "./auth.ts";
 import { commitAll, discard, dirty } from "./git.ts";
 import { PATHS, readMuseum, recordText, spanRecord, spans, type Correction, type Entity, type Museum } from "./museum.ts";
 
-export type Write = { path: string; after: string };
-export type Diff = { path: string; before: string | null; after: string };
+/** A file written whole, or (retiring a record) taken away. */
+export type Write = { path: string; after: string; delete?: false } | { path: string; delete: true };
+export type Diff = { path: string; before: string | null; after: string | null };
 export type Plan = { summary: string; writes: Write[] };
 
 const KINDS = ["person", "family", "place", "organization", "event"];
-const body = (data: unknown) => JSON.stringify(data, null, 2) + "\n";
+export const body = (data: unknown) => JSON.stringify(data, null, 2) + "\n";
 
 /** Today, as the curator's decisions are dated. MW_NOW pins it (tests). */
 export const today = () => (process.env.MW_NOW ? new Date(process.env.MW_NOW) : new Date()).toISOString().slice(0, 10);
@@ -42,7 +43,8 @@ export function check(dir: string) {
 export function diffOf(dir: string, plan: Plan): Diff[] {
   return plan.writes.map((w) => {
     const p = join(dir, w.path);
-    return { path: w.path, before: existsSync(p) ? readFileSync(p, "utf8") : null, after: w.after };
+    const before = existsSync(p) ? (/\.(json|txt|md|log)$/.test(w.path) ? readFileSync(p, "utf8") : `(a file of ${readFileSync(p).length} bytes)`) : null;
+    return { path: w.path, before, after: w.delete ? null : w.after };
   });
 }
 
@@ -50,6 +52,10 @@ export function diffOf(dir: string, plan: Plan): Diff[] {
 export function apply(dir: string, plan: Plan, who: string) {
   if (dirty(dir).length) throw new DeskError(409, "The museum has changes no commit holds. Commit or discard them on the Sync desk first.");
   for (const w of plan.writes) {
+    if (w.delete) {
+      rmSync(join(dir, w.path), { force: true });
+      continue;
+    }
     mkdirSync(dirname(join(dir, w.path)), { recursive: true });
     writeFileSync(join(dir, w.path), w.after);
   }
@@ -143,14 +149,15 @@ export function planKeep(dir: string, id: string, as: KeepAs, who: string): Plan
 }
 
 /** Hold back (a decision, not a deletion) or reject a proposal. */
-export function planDecide(dir: string, ids: string[], status: "held" | "rejected", who: string, note?: string): Plan {
+export function planDecide(dir: string, ids: string[], status: "held" | "rejected" | "accepted", who: string, note?: string): Plan {
   const m = readMuseum(dir);
   const writes = ids.map((id) => {
     const c = findCorrection(m, id);
-    if (c.status !== "proposed" && !(c.status === "held" && status === "rejected")) throw new DeskError(409, `${id} is already ${c.status}.`);
+    if (status === "accepted" && c.kind === "name") throw new DeskError(400, `${id} is a name: keep it as an entity instead.`);
+    if (c.status !== "proposed" && !(c.status === "held" && status !== "held")) throw new DeskError(409, `${id} is already ${c.status}.`);
     return decided(c, status, who, note);
   });
-  const verb = status === "held" ? "Hold back" : "Reject";
+  const verb = status === "held" ? "Hold back" : status === "accepted" ? "Accept" : "Reject";
   return { summary: ids.length === 1 ? `${verb} “${findCorrection(m, ids[0]).proposed_text}” (${ids[0]})` : `${verb} ${ids.length} proposals`, writes };
 }
 

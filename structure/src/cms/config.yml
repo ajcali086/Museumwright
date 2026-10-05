@@ -109,6 +109,10 @@ collections:
           required: false,
         }
       - { name: curator_note, label: "Curator's note (never shown)", widget: text, required: false }
+      - name: original_text
+        label: The words it replaced (set when applied)
+        widget: text
+        required: false
       - &source
         name: source
         label: Where mw found it
