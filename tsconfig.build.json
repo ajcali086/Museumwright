@@ -1,0 +1,15 @@
+{
+  // The published build: src/*.ts as plain JavaScript in dist/, because Node
+  // won't strip types from files under node_modules, which is where mw lives
+  // once installed from git. The repository's own commands run src directly.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "dist",
+    "rootDir": "src",
+    "rewriteRelativeImportExtensions": true,
+    "sourceMap": false,
+    "declaration": false
+  },
+  "include": ["src"]
+}

@@ -12,19 +12,30 @@
   },
   "scripts": {
     "test": "node --experimental-strip-types --no-warnings=ExperimentalWarning --test --test-concurrency=1 test/*.test.ts",
-    "typecheck": "tsc -p ."
+    "typecheck": "tsc -p .",
+    "build": "tsc -p tsconfig.build.json",
+    "prepare": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
     "linkedom": "0.18.13",
     "yaml": "2.9.1"
   },
   "devDependencies": {
+    "@sveltia/cms": "^0.227.2",
     "@types/node": "^22.20.5",
+    "playwright-core": "^1.63.0",
     "typescript": "^5.9.3"
   },
   "license": "SEE LICENSE IN LICENSE",
   "repository": {
     "type": "git",
     "url": "https://github.com/ajcali086/Museumwright-.git"
-  }
+  },
+  "files": [
+    "bin",
+    "dist",
+    "structure",
+    "LICENSE",
+    "README.md"
+  ]
 }

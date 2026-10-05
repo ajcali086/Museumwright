@@ -1,7 +1,8 @@
 /**
- * A static server for public/, so /admin opens locally (npm run dev):
- * http://localhost:8000/admin/. Sveltia still reads and writes the
- * repository on GitHub, signed in with a token.
+ * A static server for public/ (npm run dev): the viewer at
+ * http://localhost:8000/ and the CMS at http://localhost:8000/admin/.
+ * Sveltia still reads and writes the repository on GitHub, signed in with
+ * a token.
  */
 import { createReadStream, existsSync, statSync } from "node:fs";
 import { createServer } from "node:http";
@@ -27,7 +28,7 @@ const types = {
   ".txt": "text/plain; charset=utf-8",
 };
 
-createServer((req, res) => {
+const server = createServer((req, res) => {
   const path = decodeURIComponent(new URL(req.url ?? "/", "http://x").pathname);
   let file = normalize(join(root, path));
   if (!file.startsWith(root)) return res.writeHead(403).end();
@@ -38,4 +39,5 @@ createServer((req, res) => {
   if (!existsSync(file)) return res.writeHead(404).end("not found");
   res.writeHead(200, { "content-type": types[extname(file)] ?? "application/octet-stream" });
   createReadStream(file).pipe(res);
-}).listen(port, () => console.log(`http://localhost:${port}/admin/`));
+});
+server.listen(port, "127.0.0.1", () => console.log(`http://localhost:${server.address().port}/`));

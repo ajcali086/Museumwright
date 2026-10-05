@@ -24,9 +24,18 @@ retired IDs: never reissued, never re-created.
 ```bash
 npm install
 npm run check:model   # the refusal CI runs before a merge
-npm run dev           # http://localhost:8000/admin/
+npm run dev           # the viewer at http://localhost:8000/, the CMS at /admin/
 npm run build         # CMS config, model check, public slice (public/data/museum.json)
 ```
+
+## The viewer
+
+`public/index.html` (with `viewer.js` and `viewer.css`) is a plain page
+over the public slice: the records, each document with its plates in
+place, the entities, questions and evidence. It reads
+`/data/museum.json` and nothing else, so the corrections queue never
+shows; an unverified copy is marked, and an empty caption says so. It is
+not a theme: replace it when the museum has one.
 
 The CMS signs in to GitHub with a personal access token (classic, `repo`
 scope) and commits to `@@MW_REPO@@`, branch `main`.

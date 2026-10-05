@@ -10,10 +10,18 @@ learned from [The Spirit of Martinez](https://github.com/ajcali086/spirit-of-mar
 workbench and the Angie pilot.
 
 ```bash
+npx github:ajcali086/Museumwright- init <name> [--repo owner/name] [--title "..."] [--dir path] [--no-install] [--no-git]
+npx github:ajcali086/Museumwright- pull <url>     [--propose] [--model-url URL] [--max-width 3000] [--no-skip-log] [--museum dir]
+npx github:ajcali086/Museumwright- batch <folder> [--propose] [--model-url URL] [--no-skip-log] [--museum dir]
+```
+
+Installed from git, npm builds `dist/` (plain JavaScript) on install,
+because Node won't strip types from files under `node_modules`. In a
+checkout, `bin/mw.mjs` runs `src/` directly:
+
+```bash
 npm ci
-bin/mw.mjs init <name> [--repo owner/name] [--title "..."] [--dir path] [--no-install] [--no-git]
-bin/mw.mjs pull <url>    [--propose] [--model-url URL] [--max-width 3000] [--no-skip-log] [--museum dir]
-bin/mw.mjs batch <folder> [--propose] [--model-url URL] [--no-skip-log] [--museum dir]
+bin/mw.mjs init <name> ...
 ```
 
 Node 22.6 or later (type stripping). `batch` reads PDFs with poppler
@@ -128,12 +136,41 @@ entities, questions, evidence and the museum record, and nothing else:
 the check holds that file to its list, so a proposal has no path to the
 public render.
 
+## The generated museum's viewer
+
+Every generated museum has a plain viewer at `/` (`structure/public/index.html`,
+`viewer.js`, `viewer.css`): no framework, no build beyond the public slice
+it reads. Records first, each document with its plate thumbnails; a
+document's page shows its passages with each plate after the passage it
+follows; a plate's page shows the image, the caption (or "No caption
+given."), the credit, the status and where it came from; then entities,
+open questions and evidence. Words from a pulled page are set as text,
+never markup. It reads only `/data/museum.json`, so nothing in the queue
+reaches it. Not a theme (spec §7); a museum replaces it when it has one.
+
 ## Tests
 
 ```bash
-npm test         # 38 tests, offline
+npm test         # 50 tests, offline
 npm run typecheck
 ```
+
+- `test/admin.test.ts` opens a generated museum's `/admin` in Chromium:
+  the pinned Sveltia (served from the `@sveltia/cms` npm package of the
+  same version, in place of unpkg) loads the generated config, signs in
+  with a token, and lists what is committed, once for an empty museum and
+  once after `mw pull --propose`, down to a plate's caption in the editor.
+  GitHub is [a stand-in](test/admin/github.ts) answered from the
+  museum's own git repository; any request it can't answer fails the
+  test. Chromium comes from `MW_CHROMIUM`, `/opt/pw-browsers/chromium`, or
+  `npx playwright-core install chromium`; without one, the test is skipped
+  outside CI.
+- `test/viewer.test.ts` opens the viewer over an empty museum, an
+  unbuilt one, and one after a pull with a kept name: plates in place,
+  captions verbatim, a held file loading, hostile text staying text, the
+  queue never showing on any page, and no sideways scroll on a phone.
+- `test/install.test.ts` packs the package, installs it into a scratch
+  project, and runs `mw init` from `node_modules`.
 
 `test/angie.test.ts` is §8, the Angie test, against
 [a local reconstruction of the Angie page](test/fixtures/angie/README.md)
