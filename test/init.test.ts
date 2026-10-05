@@ -4,11 +4,18 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { parse } from "yaml";
-import { render, STRUCTURE } from "../src/init.ts";
+import { render, stepOf, STRUCTURE } from "../src/init.ts";
 import { MARKERS, purityHits } from "../src/purity.ts";
 import { freshMuseum, run } from "./helpers.ts";
 
 describe("mw init", () => {
+  it("sorts files into steps the same with Windows separators", () => {
+    for (const [unix, step] of [["src/model/records/.gitkeep", 1], ["src/cms/config.yml", 2], ["meta/sequences.json", 4], ["public/index.html", 3]] as const) {
+      assert.equal(stepOf(unix), step);
+      assert.equal(stepOf(unix.replaceAll("/", "\\")), step);
+    }
+  });
+
   it("the structure definition itself holds no content from any museum", () => {
     assert.deepEqual(purityHits(STRUCTURE), []);
   });

@@ -41,7 +41,7 @@ export async function batch(dir: string, folder: string, opts: BatchOptions, log
   const titles = new Map<string, string>();
 
   for (const path of walk(root)) {
-    const file = relative(root, path);
+    const file = relative(root, path).replace(/\\/g, "/");
     const bytes = new Uint8Array(readFileSync(path));
     const bh = bytesHash(bytes);
     if (seen.has(bh)) {

@@ -24,10 +24,11 @@ const FOLDERS = ["src/model/records", "src/model/entities", "src/model/questions
 const UNIVERSAL = ["corrections", "records", "entities", "questions", "both_stand", "links", "evidence"];
 
 /** Which step writes a structure file. */
-function stepOf(path: string): 1 | 2 | 3 | 4 {
-  if (path.startsWith("meta/")) return 4;
-  if (path === "src/cms/config.yml") return 2;
-  if (path.startsWith("src/model/") || path.startsWith("src/data/") || path.startsWith("public/images/")) return 1;
+export function stepOf(path: string): 1 | 2 | 3 | 4 {
+  const p = path.replace(/\\/g, "/");
+  if (p.startsWith("meta/")) return 4;
+  if (p === "src/cms/config.yml") return 2;
+  if (p.startsWith("src/model/") || p.startsWith("src/data/") || p.startsWith("public/images/")) return 1;
   return 3;
 }
 
