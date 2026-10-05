@@ -90,6 +90,8 @@ export async function serve(routes: Map<string, { type: string; body: Uint8Array
 /** A task's answer, given the task's name and the lines it was given ("[S3] …", "[p2] …", "[r-0003] …"). */
 export type TaskAnswer = (task: string, lines: { label: string; text: string }[]) => Record<string, unknown>;
 
+const ALIAS = "Qwen/Qwen3-1.7B-GGUF:Q4_K_M";
+
 export async function stubModel(names: [string, string][], tasks?: TaskAnswer): Promise<{ url: string; server: Server; prompts: string[] }> {
   const prompts: string[] = [];
   const server = createServer((req, res) => {
@@ -98,9 +100,11 @@ export async function stubModel(names: [string, string][], tasks?: TaskAnswer): 
     req.on("end", () => {
       const path = new URL(req.url ?? "/", "http://x").pathname;
       if (path === "/health") return res.writeHead(200, { "content-type": "application/json" }).end('{"status":"ok"}');
-      if (path === "/props") return res.writeHead(200, { "content-type": "application/json" }).end('{"model_path":"/models/Qwen3-1.7B-Q4_K_M.gguf"}');
+      if (path === "/props") return res.writeHead(200, { "content-type": "application/json" }).end(`{"model_path":"/models/Qwen3-1.7B-Q4_K_M.gguf","model_alias":"${ALIAS}"}`);
       if (path !== "/completion") return res.writeHead(404).end();
-      const { prompt, grammar } = JSON.parse(body);
+      const { prompt, grammar, model } = JSON.parse(body);
+      // As newer llama-server does: every request names the model, as the server knows it.
+      if (model !== ALIAS) return res.writeHead(400).end('{"error":{"message":"model name is missing from the request"}}');
       if (!grammar) return res.writeHead(400).end("no grammar");
       prompts.push(prompt);
       const task = /\nTask: (\w+)\n/.exec(prompt)?.[1];

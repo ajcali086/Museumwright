@@ -47,34 +47,41 @@ async function getJson(url: string, ms: number): Promise<unknown> {
   return res.json();
 }
 
-/** The model's name, if a llama.cpp server answers at `base`. */
+/**
+ * The model, if a llama.cpp server answers at `base` with one loaded: its
+ * alias (or path) exactly as the server knows it, since newer servers want
+ * that very string as `model` in every request.
+ */
 export async function reach(base: string): Promise<{ model: string } | { why: string }> {
   try {
     const health = (await getJson(`${base}/health`, 3000)) as { status?: string };
     if (health?.status !== "ok") return { why: `${base}/health says ${JSON.stringify(health)}` };
     const props = (await getJson(`${base}/props`, 3000).catch(() => ({}))) as { model_path?: string; model_alias?: string };
-    const path = props.model_alias || props.model_path || "unknown model";
-    return { model: path.split(/[\\/]/).pop()!.replace(/\.gguf$/i, "") };
+    const model = props.model_alias || props.model_path;
+    return model ? { model } : { why: `the server at ${base} has no model loaded` };
   } catch (e) {
     return { why: `no model reachable at ${base} (${(e as Error).message})` };
   }
 }
 
-/** One completion, constrained by a grammar, parsed. */
-export async function complete(base: string, text: string, grammar: string): Promise<Record<string, unknown>> {
+/** A model's short name, for records and logs: no folders, no .gguf. */
+export const modelName = (model: string) => model.split(/[\\/]/).pop()!.replace(/\.gguf$/i, "");
+
+/** One completion, constrained by a grammar, parsed. Older servers ignore `model`. */
+export async function complete(base: string, model: string, text: string, grammar: string): Promise<Record<string, unknown>> {
   const res = await fetch(`${base}/completion`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     signal: AbortSignal.timeout(180_000),
-    body: JSON.stringify({ prompt: text, grammar, temperature: 0, seed: 42, n_predict: 1024, cache_prompt: true }),
+    body: JSON.stringify({ model, prompt: text, grammar, temperature: 0, seed: 42, n_predict: 1024, cache_prompt: true }),
   });
-  if (!res.ok) throw new Error(`/completion: ${res.status}`);
+  if (!res.ok) throw new Error(`/completion: ${res.status} ${(await res.text().catch(() => "")).slice(0, 200)}`.trim());
   const { content } = (await res.json()) as { content: string };
   return JSON.parse(content) as Record<string, unknown>;
 }
 
-export async function namesIn(base: string, text: string): Promise<Name[]> {
-  const parsed = (await complete(base, prompt(text.slice(0, 4000)), GRAMMAR)) as { names?: Name[] };
+export async function namesIn(base: string, model: string, text: string): Promise<Name[]> {
+  const parsed = (await complete(base, model, prompt(text.slice(0, 4000)), GRAMMAR)) as { names?: Name[] };
   return (parsed.names ?? []).filter((n) => typeof n?.name === "string" && KINDS.includes(n.kind));
 }
 
@@ -97,14 +104,15 @@ export async function propose(spans: Span[], base: string, log: RunLog, opts: Pr
     log.say(`propose: ${reached.why}; the pile is empty`);
     return [];
   }
-  log.say(`propose: ${reached.model} at ${base}, ${spans.length} spans`);
+  const short = modelName(reached.model);
+  log.say(`propose: ${short} at ${base}, ${spans.length} spans`);
   const items: Item[] = [];
   let dropped = 0;
   try {
     for (const s of spans) {
       if (!s.text.trim()) continue;
       const seen = new Set<string>();
-      for (const n of await namesIn(base, s.text)) {
+      for (const n of await namesIn(base, reached.model, s.text)) {
         const name = n.name.trim();
         if (!spanHolds(s.text, name)) {
           dropped++;
@@ -113,7 +121,7 @@ export async function propose(spans: Span[], base: string, log: RunLog, opts: Pr
         if (seen.has(name)) continue;
         seen.add(name);
         const hash = inputHash("name", s.record, s.span, s.text, name, n.kind);
-        items.push(nameItem({ hash, record: s.record, span: s.span, name, kind: n.kind, model: reached.model, prov: s.prov }));
+        items.push(nameItem({ hash, record: s.record, span: s.span, name, kind: n.kind, model: short, prov: s.prov }));
       }
     }
   } catch (e) {
@@ -124,7 +132,7 @@ export async function propose(spans: Span[], base: string, log: RunLog, opts: Pr
   const kinds = opts.kinds ?? NEW_KINDS;
   if (!kinds.length) return items;
   try {
-    const more = await proposeKinds({ spans, ask: (p, g) => complete(base, p, g), model: reached.model, dir: opts.dir, kinds, titles: opts.titles });
+    const more = await proposeKinds({ spans, ask: (p, g) => complete(base, reached.model, p, g), model: short, dir: opts.dir, kinds, titles: opts.titles });
     const count = (k: string) => more.items.filter((i) => i.label === `${k} proposal`).length;
     log.say(`propose: ${kinds.map((k) => `${count(k)} ${k}${count(k) === 1 ? "" : "s"}`).join(", ")}; ${more.dropped} dropped by the span rule (a quote not in its span)`);
     return [...items, ...more.items];

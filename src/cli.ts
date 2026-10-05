@@ -18,7 +18,7 @@ import { join, relative, resolve } from "node:path";
 import { createInterface } from "node:readline/promises";
 import { batch } from "./batch.ts";
 import { init, outPath, STRUCTURE } from "./init.ts";
-import { DEFAULT_MODEL_URL, reach } from "./propose.ts";
+import { DEFAULT_MODEL_URL, modelName, reach } from "./propose.ts";
 import { pull } from "./pull.ts";
 import { type Outcome } from "./repo.ts";
 import * as G from "./serve/git.ts";
@@ -379,7 +379,7 @@ async function doctor(flags: Flags): Promise<number> {
 
   const url = modelUrl(flags);
   const m = await reach(url);
-  line("model" in m ? "ok" : "warn", "model" in m ? `the local model answers at ${url} (${m.model})` : `no local model at ${url}: names won't be proposed, everything else works`, "model" in m ? undefined : "Start one:  llama-server -hf Qwen/Qwen3-1.7B-GGUF:Q4_K_M --port 8080");
+  line("model" in m ? "ok" : "warn", "model" in m ? `the local model answers at ${url} (${modelName(m.model)})` : `no local model at ${url}: names won't be proposed, everything else works`, "model" in m ? undefined : "Start one:  llama-server -hf Qwen/Qwen3-1.7B-GGUF:Q4_K_M --port 8080");
 
   const where = resolve(str(flags, "museum") ?? ".");
   try {
