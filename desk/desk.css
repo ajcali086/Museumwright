@@ -15,6 +15,8 @@
   --good-bg: #e7f3e8;
   --add: #e6f4ea;
   --del: #fbe9e7;
+  --warn: #8a5a00;
+  --warn-bg: #fdf3dc;
 }
 @media (prefers-color-scheme: dark) {
   :root {
@@ -32,6 +34,8 @@
     --good-bg: #1b2f1f;
     --add: #1c3322;
     --del: #3b201c;
+    --warn: #e7bf6a;
+    --warn-bg: #33270f;
   }
 }
 * { box-sizing: border-box; }
@@ -89,6 +93,9 @@ button:disabled { opacity: 0.45; cursor: not-allowed; }
 .chip { display: inline-block; font-size: 12px; padding: 0 0.5em; border-radius: 3px; border: 1px solid var(--rule); color: var(--muted); margin-left: 0.35rem; vertical-align: middle; }
 .chip.bad { border-color: var(--bad); color: var(--bad); }
 .chip.good { border-color: var(--good); color: var(--good); }
+.origins { margin: 0.35rem 0; font-size: 13px; color: var(--muted); }
+.origins .chip { margin-left: 0; margin-right: 0.35rem; }
+.chip.web { border-color: var(--warn); color: var(--warn); background: var(--warn-bg); }
 blockquote.span { margin: 0.5rem 0; padding: 0.5rem 0.75rem; border-left: 3px solid var(--rule); background: var(--paper); font-family: Georgia, serif; }
 mark { background: var(--mark); color: inherit; padding: 0 0.1em; }
 .refusal { color: var(--bad); background: var(--bad-bg); padding: 0.4rem 0.6rem; border-radius: 6px; margin: 0.5rem 0; }

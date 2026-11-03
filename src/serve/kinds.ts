@@ -16,7 +16,8 @@ import { DeskError } from "./auth.ts";
 import { body, today, type Plan, type Write } from "./actions.ts";
 import { planNote } from "./actions.ts";
 import { planRetire } from "./edit.ts";
-import { PATHS, readMuseum, spans, type Correction, type Museum } from "./museum.ts";
+import { CLAIM_KINDS, quoteCarries, spanHolds, tooShort } from "../spanrule.ts";
+import { PATHS, keptNames, readMuseum, spans, type Correction, type Museum } from "./museum.ts";
 import { slugify } from "../util.ts";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -32,14 +33,19 @@ function proposal(m: Museum, id: string, kind?: string): Proposal {
   return c;
 }
 
-/** The span rule, for every citation: no citation, no acceptance; the refusal quotes the span. */
+/**
+ * The span rule, for every citation: no citation, no acceptance; the refusal
+ * quotes the span. A claim's quote must also be long enough to carry it.
+ */
 export function citeRefusal(m: Museum, c: Proposal): string | undefined {
   const text = spans(m.records);
+  const names = keptNames(m.entities);
   if (!(c.cites ?? []).length) return `Can't keep ${c.id}: it cites no span.`;
   for (const x of c.cites ?? []) {
     const words = text.get(x.span);
     if (words === undefined) return `Can't keep ${c.id}: it cites ${x.span}, which isn't in the museum.`;
-    if (!words.includes(x.quote)) return `Can't keep ${c.id}: the span ${x.span} doesn't contain “${x.quote}”. The span reads: “${words}”`;
+    if (CLAIM_KINDS.includes(c.kind ?? "") && !quoteCarries(x.quote, names)) return `Can't keep ${c.id}: ${tooShort(x.quote)}.`;
+    if (!spanHolds(words, x.quote)) return `Can't keep ${c.id}: the span ${x.span} doesn't contain “${x.quote}”. The span reads: “${words}”`;
   }
   return undefined;
 }

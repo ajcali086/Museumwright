@@ -65,7 +65,7 @@ describe("the local admin, no remote", () => {
   it("makes an entity anchored to a record that spells it, and refuses one anchored to nothing that does", async () => {
     const bad = await save("entities", { label: "Ezra Pound", kind: "person", anchors: ["r-0002"] });
     assert.equal(bad.body.ok, false);
-    assert.match(bad.body.refusal, /no anchor spells "Ezra Pound"/);
+    assert.match(bad.body.refusal, /no span of an anchor spells "Ezra Pound"/);
     assert.ok(!existsSync(join(b.dir, "src/model/entities/ezra-pound.json")), "the refused write was taken back");
     const none = await save("entities", { label: "Ezra Pound", kind: "person", anchors: [] });
     assert.equal(none.status, 422);
@@ -82,10 +82,10 @@ describe("the local admin, no remote", () => {
     const bad = await save("evidence", { span: "r-0001#p2", quote: "Paid in full, June 1911.", record: "r-0001", type: "supports" });
     assert.equal(bad.status, 422);
     assert.match(bad.body.refusal, /isn't in r-0001#p2, word for word/);
-    const good = await save("evidence", { span: "r-0001#p2", quote: "May 1911", record: "r-0001", type: "contradicts", note: "The bell's plaque says 1912." });
+    const good = await save("evidence", { span: "r-0001#p2", quote: "Paid in full, May 1911", record: "r-0001", type: "contradicts", note: "The bell's plaque says 1912." });
     assert.equal(good.body.ok, false, "a contradiction must be carried by a question");
     assert.match(good.body.refusal, /a contradiction no question carries/);
-    const ok = await save("evidence", { span: "r-0001#p2", quote: "May 1911", record: "r-0001", type: "supports" });
+    const ok = await save("evidence", { span: "r-0001#p2", quote: "Paid in full, May 1911", record: "r-0001", type: "supports" });
     assert.equal(ok.body.ok, true, JSON.stringify(ok.body));
     assert.equal(json(join(b.dir, "src/model/evidence.json"))[0].id, "ev-001");
   });

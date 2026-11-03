@@ -88,7 +88,7 @@ describe("check:model", () => {
 
   refuses("an entity whose anchors don't spell its name", (d) =>
     write(d, "src/model/entities/ada.json", { id: "0badc0de", slug: "ada", kind: "person", label: "Ada Lovelace", anchors: ["r-0002"] }),
-  /no anchor spells "Ada Lovelace"/);
+  /no span of an anchor spells "Ada Lovelace"/);
 
   refuses("a record not filed under its ID", (d) => {
     const r = readFileSync(join(d, "src/model/records/r-0001.json"), "utf8");
@@ -123,7 +123,7 @@ describe("check:model", () => {
   /the quote isn't in r-0001#p1/);
 
   refuses("a contradiction no question carries", (d) =>
-    write(d, "src/model/evidence.json", [{ id: "ev-001", claim: { span: "r-0001#p1", quote: "in 1833" }, record: "r-0002", type: "contradicts", curator: "c", date: "2026-10-05" }]),
+    write(d, "src/model/evidence.json", [{ id: "ev-001", claim: { span: "r-0001#p1", quote: "in London in 1833" }, record: "r-0002", type: "contradicts", curator: "c", date: "2026-10-05" }]),
   /a contradiction no question carries/);
 
   refuses("a public slice that reaches the queue", (d) => {
@@ -138,43 +138,89 @@ describe("check:model", () => {
 
   it("passes a contradiction whose claims are in their spans, word for word", () => {
     const d = seeded();
-    kind(d, { kind: "contradiction", cites: [{ span: "r-0001#p1", quote: "in 1833" }, { span: "plate:r-0002", quote: "London" }] });
+    kind(d, { kind: "contradiction", cites: [{ span: "r-0001#p1", quote: "in London in 1833" }, { span: "plate:r-0002", quote: "The Analytical Engine, London" }] });
     assert.equal(check(d).code, 0, check(d).out);
   });
 
   refuses("a contradiction quoting words its span doesn't hold", (d) =>
-    kind(d, { kind: "contradiction", cites: [{ span: "r-0001#p1", quote: "in 1834" }, { span: "plate:r-0002", quote: "London" }] }),
+    kind(d, { kind: "contradiction", cites: [{ span: "r-0001#p1", quote: "in 1834" }, { span: "plate:r-0002", quote: "The Analytical Engine, London" }] }),
   /r-0001#p1 doesn't contain "in 1834"/);
 
   refuses("a kept contradiction no Both Stand entry carries", (d) =>
-    kind(d, { kind: "contradiction", cites: [{ span: "r-0001#p1", quote: "in 1833" }, { span: "plate:r-0002", quote: "London" }], status: "accepted", ...decided }),
+    kind(d, { kind: "contradiction", cites: [{ span: "r-0001#p1", quote: "in London in 1833" }, { span: "plate:r-0002", quote: "The Analytical Engine, London" }], status: "accepted", ...decided }),
   /kept, but no Both Stand entry carries it/);
 
   refuses("a question raised by no record", (d) =>
-    kind(d, { kind: "question", cites: [{ span: "r-0001#p1", quote: "in 1833" }], question: { text: "Where?", record: "r-0099" } }),
+    kind(d, { kind: "question", cites: [{ span: "r-0001#p1", quote: "in London in 1833" }], question: { text: "Where?", record: "r-0099" } }),
   /raised by r-0099, no such record/);
 
   refuses("a gap that cites one end of its chain", (d) =>
-    kind(d, { kind: "gap", cites: [{ span: "r-0001#p1", quote: "in 1833" }], gap: { record: "r-0001", missing: "the years after" } }),
+    kind(d, { kind: "gap", cites: [{ span: "r-0001#p1", quote: "in London in 1833" }], gap: { record: "r-0001", missing: "the years after" } }),
   /a gap cites both ends of its chain/);
 
   refuses("a link cited on one side only", (d) =>
-    kind(d, { kind: "link", cites: [{ span: "r-0001#p1", quote: "London" }, { span: "r-0001#p1", quote: "in 1833" }], pair: { a: "r-0001", b: "r-0002" }, basis: "shared place" }),
+    kind(d, { kind: "link", cites: [{ span: "r-0001#p1", quote: "London" }, { span: "r-0001#p1", quote: "in London in 1833" }], pair: { a: "r-0001", b: "r-0002" }, basis: "shared place" }),
   /cites no span on both sides/);
 
   refuses("a merged duplicate with neither record retired", (d) =>
-    kind(d, { kind: "duplicate", cites: [{ span: "r-0001#p1", quote: "London" }, { span: "plate:r-0002", quote: "London" }], pair: { a: "r-0001", b: "r-0002" }, status: "applied", ...decided }),
+    kind(d, { kind: "duplicate", cites: [{ span: "r-0001#p1", quote: "Babbage in London" }, { span: "plate:r-0002", quote: "The Analytical Engine, London" }], pair: { a: "r-0001", b: "r-0002" }, status: "applied", ...decided }),
   /merged, but neither record is retired/);
 
   refuses("a Both Stand entry settled with no note", (d) =>
-    write(d, "src/model/both-stand/when.json", { id: "when", title: "When?", claim_a: { span: "r-0001#p1", quote: "in 1833" }, claim_b: { span: "plate:r-0002", quote: "London" }, status: "settled", opened_by: "c", opened_on: "2026-10-05" }),
+    write(d, "src/model/both-stand/when.json", { id: "when", title: "When?", claim_a: { span: "r-0001#p1", quote: "in London in 1833" }, claim_b: { span: "plate:r-0002", quote: "The Analytical Engine, London" }, status: "settled", opened_by: "c", opened_on: "2026-10-05" }),
   /settled, with no note saying how/);
 
   refuses("a link whose basis isn't in its span", (d) =>
-    write(d, "src/model/links.json", [{ id: "ln-001", from: "r-0001", to: "r-0002", basis: "shared place", cites: [{ span: "r-0001#p1", quote: "Paris" }, { span: "plate:r-0002", quote: "London" }], curator: "c", date: "2026-10-05" }]),
+    write(d, "src/model/links.json", [{ id: "ln-001", from: "r-0001", to: "r-0002", basis: "shared place", cites: [{ span: "r-0001#p1", quote: "Paris" }, { span: "plate:r-0002", quote: "The Analytical Engine, London" }], curator: "c", date: "2026-10-05" }]),
   /r-0001#p1 doesn't contain "Paris"/);
 
   refuses("a text correction that changes nothing", (d) =>
     write(d, "src/data/corrections/c-0002.json", { id: "c-0002", target: "plate:r-0002", proposed_text: "The Analytical Engine, London.", reason: "r", proposed_by: "x", date: "2026-10-05", status: "proposed" }),
   /c-0002: changes nothing/);
+
+  // The span rule's length: a verbatim quote proves the words exist, not that they carry the claim.
+  const evidence = (quote: string) => [{ id: "ev-001", claim: { span: "r-0001#p1", quote }, record: "r-0002", type: "supports", curator: "c", date: "2026-10-05" }];
+
+  refuses("an evidence quote too short to carry its claim", (d) => write(d, "src/model/evidence.json", evidence("in 1833")),
+    /ev-001: "in 1833" is too short to carry a claim/);
+
+  it("passes a short evidence quote that is exactly an entity's name, and a long one trimmed", () => {
+    const d = seeded();
+    write(d, "src/model/entities/babbage.json", { id: "0badc0de", slug: "babbage", kind: "person", label: "Charles Babbage", aliases: [{ name: "Babbage", sources: ["r-0001"] }], anchors: ["r-0001"] });
+    write(d, "src/model/evidence.json", [...evidence("Babbage"), { ...evidence("  met Charles Babbage  ")[0], id: "ev-002" }]);
+    const r = check(d);
+    assert.equal(r.code, 0, r.out);
+  });
+
+  refuses("a contradiction whose claim is too short to carry it", (d) =>
+    kind(d, { kind: "contradiction", cites: [{ span: "r-0001#p1", quote: "in 1833" }, { span: "plate:r-0002", quote: "The Analytical Engine, London" }] }),
+  /c-0002: "in 1833" is too short to carry a claim/);
+
+  it("passes a rejected proposal with a short quote: it asserts nothing", () => {
+    const d = seeded();
+    kind(d, { kind: "contradiction", cites: [{ span: "r-0001#p1", quote: "in 1833" }, { span: "plate:r-0002", quote: "London" }], status: "rejected", ...decided });
+    const r = check(d);
+    assert.equal(r.code, 0, r.out);
+  });
+
+  it("passes a link on a short shared word: the word is the claim", () => {
+    const d = seeded();
+    kind(d, { kind: "link", cites: [{ span: "r-0001#p1", quote: "London" }, { span: "plate:r-0002", quote: "London" }], pair: { a: "r-0001", b: "r-0002" }, basis: "shared place" });
+    const r = check(d);
+    assert.equal(r.code, 0, r.out);
+  });
+
+  refuses("a name proposal of one character", (d) => kind(d, { kind: "name", proposed_text: "A", entity_kind: "person" }),
+    /c-0002: r-0001#p1 doesn't contain "A"/);
+
+  refuses("an entity spelled only in its anchor's title, which no one quoted", (d) =>
+    write(d, "src/model/entities/post.json", { id: "0badc0de", slug: "a-post", kind: "organization", label: "A post", anchors: ["r-0001"] }),
+  /no span of an anchor spells "A post"/);
+
+  refuses("an entity spelled only across two spans run together", (d) => {
+    const r = JSON.parse(readFileSync(join(d, "src/model/records/r-0001.json"), "utf8"));
+    r.passages.push({ id: "p2", text: "Later he wrote of it." });
+    write(d, "src/model/records/r-0001.json", r);
+    write(d, "src/model/entities/x.json", { id: "0badc0de", slug: "x", kind: "place", label: "1833.\nLater", anchors: ["r-0001"] });
+  }, /no span of an anchor spells/);
 });

@@ -7,9 +7,14 @@ import { existsSync, readFileSync } from "node:fs";
 import {
   ENTITY_KINDS,
   LINK_BASES,
+  MIN_QUOTE_CHARS,
+  MIN_QUOTE_WORDS,
   PROPOSAL_KINDS,
+  keptNames,
   loadModel,
-  recordText,
+  quoteCarries,
+  recordSpans,
+  spanHolds,
   spanRecord,
   spans,
   type Model,
@@ -27,6 +32,13 @@ const RECORD_STATUSES = ["verified", "unverified", "not-held"];
 const CORRECTION_STATUSES = ["proposed", "accepted", "applied", "rejected", "held"];
 
 type Check = { name: string; run: (m: Model, base: URL) => string[] };
+
+/** The refusal for a quote too short to carry its claim. */
+const tooShort = (who: string, quote: string | undefined) =>
+  `${who}: "${(quote ?? "").trim()}" is too short to carry a claim (${MIN_QUOTE_CHARS} characters or ${MIN_QUOTE_WORDS} words, or exactly an entity's name)`;
+
+/** Proposal kinds whose quotes stand for a statement, not a shared word: each needs a quote long enough to carry it. */
+const CLAIM_KINDS = ["contradiction", "question", "gap", "duplicate"];
 
 /**
  * A decided proposal citing a record since retired (merged into another,
@@ -146,9 +158,13 @@ export const checks: Check[] = [
     },
   },
   {
-    name: "each entity is anchored: at least one record, every anchor exists, one spells its name, each alias as its sources write it",
-    run: (m) =>
-      m.entities.flatMap((e) => {
+    name: "each entity is anchored: at least one record, every anchor exists, one span of one spells its name, each alias as a span of its sources writes it",
+    run: (m) => {
+      const text = spans(m.records);
+      // A name is anchored in a single span (a passage or a caption), never in
+      // the record's words run together, nor in a title or credit nobody quoted.
+      const spells = (id: string, name: string) => recordSpans(text, id).some((words) => spanHolds(words, name));
+      return m.entities.flatMap((e) => {
         const anchors = e.anchors ?? [];
         const names = [e.label, ...(e.aliases ?? []).map((a) => a.name)];
         const rec = (id: string) => m.records.find((r) => r.id === id);
@@ -158,16 +174,17 @@ export const checks: Check[] = [
           ...fail(anchors.length > 0, `${e.slug}: no anchor; a kept name needs the record that spells it`),
           ...anchors.flatMap((id) => fail(!!rec(id), `${e.slug}: anchor ${id}, no such record`)),
           ...(anchors.length
-            ? fail(anchors.some((id) => { const r = rec(id); return !!r && names.some((n) => recordText(r).includes(n)); }), `${e.slug}: no anchor spells "${e.label}" or an alias`)
+            ? fail(anchors.some((id) => !!rec(id) && names.some((n) => spells(id, n))), `${e.slug}: no span of an anchor spells "${e.label}" or an alias`)
             : []),
           ...(e.aliases ?? []).flatMap((a) =>
             (a.sources ?? []).flatMap((id) => {
               const r = rec(id);
-              return r ? fail(recordText(r).includes(a.name), `${e.slug}: ${id} doesn't write "${a.name}"`) : [`${e.slug}: alias source ${id}, no such record`];
+              return r ? fail(spells(id, a.name), `${e.slug}: no span of ${id} writes "${a.name}"`) : [`${e.slug}: alias source ${id}, no such record`];
             }),
           ),
         ];
-      }),
+      });
+    },
   },
   {
     name: "each question is bounded, its references resolve, and one closes only on evidence",
@@ -185,16 +202,18 @@ export const checks: Check[] = [
       ]),
   },
   {
-    name: "each evidence link quotes its span verbatim, names a record, and every contradiction is carried by a question",
+    name: "each evidence link quotes its span verbatim, at enough length to carry the claim, names a record, and every contradiction is carried by a question",
     run: (m) => {
       const text = spans(m.records);
+      const names = keptNames(m.entities);
       return m.evidence.flatMap((l) => [
         ...fail(m.records.some((r) => r.id === l.record), `${l.id}: record ${l.record}, none such`),
         ...fail(["supports", "contradicts", "qualifies"].includes(l.type), `${l.id}: type ${l.type}`),
         ...fail(text.has(l.claim?.span), `${l.id}: span ${l.claim?.span}, none such`),
         ...(text.has(l.claim?.span)
-          ? fail(!!l.claim.quote && text.get(l.claim.span)!.includes(l.claim.quote), `${l.id}: the quote isn't in ${l.claim.span}`)
+          ? fail(spanHolds(text.get(l.claim.span), l.claim.quote), `${l.id}: the quote isn't in ${l.claim.span}`)
           : []),
+        ...fail(quoteCarries(l.claim?.quote, names), tooShort(l.id, l.claim?.quote)),
         ...fail(iso.test(l.date ?? "") && !!l.curator?.trim(), `${l.id}: who and when`),
         ...(l.type === "contradicts"
           ? fail(m.questions.some((q) => (q.evidence ?? []).includes(l.id)), `${l.id}: a contradiction no question carries`)
@@ -243,9 +262,10 @@ export const checks: Check[] = [
         .flatMap((c) => {
           const span = text.get(c.target);
           const record = spanRecord(c.target);
-          const kept = m.entities.find((e) => e.label === c.proposed_text || (e.aliases ?? []).some((a) => a.name === c.proposed_text));
+          const name = (c.proposed_text ?? "").trim();
+          const kept = m.entities.find((e) => e.label === name || (e.aliases ?? []).some((a) => a.name === name));
           return [
-            ...fail(span !== undefined && !!c.proposed_text && span.includes(c.proposed_text), `${c.id}: ${c.target} doesn't contain "${c.proposed_text}"`),
+            ...fail(spanHolds(span, name), `${c.id}: ${c.target} doesn't contain "${name}"`),
             ...(c.entity_kind ? fail(ENTITY_KINDS.includes(c.entity_kind), `${c.id}: entity kind ${c.entity_kind}`) : []),
             ...(c.status === "applied" ? [`${c.id}: a name is kept (accepted), not applied`] : []),
             ...(c.status === "accepted"
@@ -261,6 +281,7 @@ export const checks: Check[] = [
       const text = spans(m.records);
       const isRecord = (id: string | undefined) => !!id && m.records.some((r) => r.id === id);
       const dead = new Set((m.tombstones ?? []).map((t) => t.id));
+      const names = keptNames(m.entities);
       return m.corrections
         .filter((c) => c.kind && !["text", "name"].includes(c.kind))
         .flatMap((c) => {
@@ -270,7 +291,11 @@ export const checks: Check[] = [
             if (retiredSpan(m)(c, x?.span)) return [];
             const words = text.get(x?.span);
             if (words === undefined) return [`${c.id}: citation ${i + 1} cites ${x?.span}, no such span`];
-            return fail(!!x.quote && words.includes(x.quote), `${c.id}: ${x.span} doesn't contain "${x.quote}"`);
+            return [
+              ...fail(spanHolds(words, x.quote), `${c.id}: ${x.span} doesn't contain "${x.quote}"`),
+              // A rejected proposal asserts nothing, so only a live or kept one must quote enough to carry its claim.
+              ...(CLAIM_KINDS.includes(c.kind!) && c.status !== "rejected" ? fail(quoteCarries(x.quote, names), tooShort(c.id, x.quote)) : []),
+            ];
           });
           const sides = (a?: string, b?: string) => [
             ...fail(isRecord(a) || dead.has(a ?? ""), `${c.id}: no record ${a}`),
@@ -328,12 +353,15 @@ export const checks: Check[] = [
     run: (m) => {
       const text = spans(m.records);
       const ids = new Set(m.corrections.map((c) => c.id));
+      const names = keptNames(m.entities);
       return m.bothStand.flatMap((b) => [
         ...fail(/^[a-z0-9]+(-[a-z0-9]+)*$/.test(b.id ?? ""), `${b.id}: malformed`),
         ...fail(!!b.title?.trim(), `${b.id}: no title`),
         ...[b.claim_a, b.claim_b].flatMap((x, i) => {
           const words = text.get(x?.span);
-          return words === undefined ? [`${b.id}: claim ${i ? "b" : "a"} cites ${x?.span}, no such span`] : fail(!!x.quote && words.includes(x.quote), `${b.id}: ${x.span} doesn't contain "${x.quote}"`);
+          return words === undefined
+            ? [`${b.id}: claim ${i ? "b" : "a"} cites ${x?.span}, no such span`]
+            : [...fail(spanHolds(words, x.quote), `${b.id}: ${x.span} doesn't contain "${x.quote}"`), ...fail(quoteCarries(x.quote, names), tooShort(b.id, x.quote))];
         }),
         ...fail(["standing", "settled"].includes(b.status), `${b.id}: status ${b.status}`),
         ...(b.status === "settled" ? fail(!!b.settled_note?.trim(), `${b.id}: settled, with no note saying how`) : []),
@@ -354,7 +382,7 @@ export const checks: Check[] = [
           ...fail(isRecord(l.from) && isRecord(l.to) && l.from !== l.to, `${l.id}: joins ${l.from} and ${l.to}`),
           ...fail(LINK_BASES.includes(l.basis), `${l.id}: basis ${l.basis}`),
           ...fail((l.cites ?? []).some((x) => spanRecord(x.span) === l.from) && (l.cites ?? []).some((x) => spanRecord(x.span) === l.to), `${l.id}: its basis isn't cited on both sides`),
-          ...(l.cites ?? []).flatMap((x) => fail(text.get(x.span)?.includes(x.quote) ?? false, `${l.id}: ${x.span} doesn't contain "${x.quote}"`)),
+          ...(l.cites ?? []).flatMap((x) => fail(spanHolds(text.get(x.span), x.quote), `${l.id}: ${x.span} doesn't contain "${x.quote}"`)),
           ...fail(!!l.curator?.trim() && iso.test(l.date ?? ""), `${l.id}: who and when`),
         ]),
       ];

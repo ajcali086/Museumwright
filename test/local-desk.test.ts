@@ -102,7 +102,7 @@ describe("the local admin, in Chromium, no remote", { skip: noBrowser }, () => {
     await go("evidence", /^Evidence/);
     const e = page.locator("form.editor");
     await e.getByLabel(/The claim/).selectOption("r-0001#p2");
-    await e.getByLabel(/Its words/).fill("May 1911");
+    await e.getByLabel(/Its words/).fill("Paid in full, May 1911");
     await e.getByLabel(/The record that bears/).selectOption("r-0001");
     await write(e, "Show the link…");
     await page.getByRole("cell", { name: "ev-001" }).waitFor();

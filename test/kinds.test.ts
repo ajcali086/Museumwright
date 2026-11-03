@@ -35,7 +35,7 @@ describe("proposal kinds, generated", () => {
 
   it("asks for every kind, keeps what holds, drops what doesn't, and the check passes", () => {
     assert.equal(first.code, 0, first.out);
-    assert.match(first.out, /propose: 1 contradiction, 1 question, 1 gap, 1 duplicate, 1 link; 3 dropped by the span rule/);
+    assert.match(first.out, /propose: 1 contradiction, 1 question, 1 gap, 1 duplicate, 1 link; 4 dropped by the span rule/);
     assert.match(first.out, /check passes/);
     const kinds = [...new Set(queue().map((c) => c.kind))].sort();
     assert.deepEqual(kinds, ["contradiction", "duplicate", "gap", "link", "name", "question"]);

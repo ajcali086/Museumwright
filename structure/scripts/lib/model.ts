@@ -220,8 +220,34 @@ export function spans(records: MuseumRecord[]): Map<string, string> {
 export const spanRecord = (key: string) =>
   key.startsWith("plate:") ? key.slice(6) : key.split("#")[0];
 
-/** All of a record's own words: title, caption, credit, alt text and passages. */
-export const recordText = (r: MuseumRecord) =>
-  [r.title, r.caption ?? "", r.credit ?? "", r.alt ?? "", ...(r.passages ?? []).map((p) => p.text)].join(
-    "\n",
-  );
+/** The spans of one record, by key. */
+export const recordSpans = (text: Map<string, string>, id: string) =>
+  [...text].filter(([key]) => spanRecord(key) === id).map(([, words]) => words);
+
+// The span rule. mw's src/spanrule.ts holds the same two functions; a test in
+// mw holds the copies to the same answers, so the proposer, the desk and this
+// check never disagree.
+
+/** A quote stands on its own at 12 characters or 3 words; shorter, it must be exactly a kept name. */
+export const MIN_QUOTE_CHARS = 12;
+export const MIN_QUOTE_WORDS = 3;
+
+/** The span rule: the trimmed quote is in the span word for word, and is more than one character. */
+export function spanHolds(span: string | undefined, quote: string | undefined): boolean {
+  const q = (quote ?? "").trim();
+  return span !== undefined && q.length > 1 && span.includes(q);
+}
+
+/**
+ * Whether a quote is long enough to carry a claim. A verbatim surname matches
+ * almost any span, so a short quote passes only when it is exactly one of
+ * `names` (an entity's label or alias), where the name is the claim. Names
+ * and links don't use this: there the short shared word is the claim.
+ */
+export function quoteCarries(quote: string | undefined, names: readonly string[] = []): boolean {
+  const q = (quote ?? "").trim();
+  return q.length >= MIN_QUOTE_CHARS || q.split(/\s+/).length >= MIN_QUOTE_WORDS || names.includes(q);
+}
+
+/** Every kept name: each entity's label and aliases. */
+export const keptNames = (entities: Entity[]) => entities.flatMap((e) => [e.label, ...(e.aliases ?? []).map((a) => a.name)]);

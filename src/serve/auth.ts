@@ -33,6 +33,8 @@ export class Desk {
   readonly setupCode: string;
   private sessions = new Map<string, { name: string; until: number }>();
   private failures = 0;
+  /** Sign-ins wait their turn: the delay after a miss must hold for guesses sent all at once, too. */
+  private turn: Promise<unknown> = Promise.resolve();
 
   constructor(dir: string) {
     this.dir = dir;
@@ -70,7 +72,13 @@ export class Desk {
     return this.open(name);
   }
 
-  async signIn(passcode: string, name: string): Promise<string> {
+  signIn(passcode: string, name: string): Promise<string> {
+    const attempt = this.turn.then(() => this.tryPasscode(passcode, name));
+    this.turn = attempt.catch(() => undefined);
+    return attempt;
+  }
+
+  private async tryPasscode(passcode: string, name: string): Promise<string> {
     const p = this.read().passcode;
     if (!p) throw new DeskError(409, "The desk has no passcode yet. Use the setup code.");
     // Slower after each miss, so a passcode can't be guessed at speed.

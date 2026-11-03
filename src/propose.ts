@@ -17,6 +17,7 @@ import { inputHash, type RunLog } from "./util.ts";
 import type { Kind } from "./records.ts";
 import { nameItem, type Provenance } from "./records.ts";
 import type { Item } from "./repo.ts";
+import { spanHolds } from "./spanrule.ts";
 
 export const DEFAULT_MODEL_URL = "http://127.0.0.1:8080";
 export const KINDS = ["person", "family", "place", "organization", "event"] as const;
@@ -78,8 +79,8 @@ export async function namesIn(base: string, text: string): Promise<Name[]> {
   return (parsed.names ?? []).filter((n) => typeof n?.name === "string" && KINDS.includes(n.kind));
 }
 
-/** The span rule: kept only if the span contains the name exactly as the model wrote it. */
-export const spanHolds = (span: string, name: string) => name.trim().length > 1 && span.includes(name.trim());
+/** The span rule (src/spanrule.ts): kept only if the span contains the name exactly as the model wrote it. */
+export { spanHolds };
 
 export type ProposeOptions = {
   /** The museum, for proposals across its records (duplicates, links). */

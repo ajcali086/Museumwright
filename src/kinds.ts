@@ -15,6 +15,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { proposalItem, type CiteRef, type Kind, type Provenance, type RecordRef } from "./records.ts";
 import type { Item } from "./repo.ts";
+import { CLAIM_KINDS, quoteCarries, spanHolds } from "./spanrule.ts";
 import { inputHash } from "./util.ts";
 
 export const NEW_KINDS: Kind[] = ["contradiction", "question", "gap", "duplicate", "link"];
@@ -68,14 +69,16 @@ export async function proposeKinds(o: { spans: RunSpan[]; ask: Ask; model: strin
   if (!spans.length) return { items, dropped };
   const prov = spans[0].prov;
   const label = new Map(spans.map((s, i) => [`S${i + 1}`, s]));
-  const holds = (s: RunSpan | undefined, quote: string | undefined): s is RunSpan => !!s && !!quote && quote.length > 1 && s.text.includes(quote);
+  // The span rule as check:model reads it: in the span word for word, and, for a claim, long enough to carry it.
+  // No kept names are known here, so a short quote that is exactly a name is dropped too: the stricter side.
+  const holds = (s: RunSpan | undefined, quote: string | undefined): s is RunSpan => !!s && spanHolds(s.text, quote) && quoteCarries(quote);
   const cite = (s: RunSpan, quote: string): CiteRef => ({ ref: { hash: s.record }, span: s.span, quote });
 
   // Contradictions: over every span the run brings in.
   if (o.kinds.includes("contradiction") && spans.length > 1) {
     const body = spans.slice(0, 80).map((s, i) => `[S${i + 1}] ${clip(s.text, 400)}`).join("\n");
     const out = await o.ask(
-      prompt("contradictions", "You find pairs of statements that cannot both be true: the same thing given two different dates, places, numbers or names. Give each statement's label and copy its words exactly. If none conflict, return an empty list.", body),
+      prompt("contradictions", "You find pairs of statements that cannot both be true: the same thing given two different dates, places, numbers or names. Give each statement's label and copy the whole statement exactly, at least three words. If none conflict, return an empty list.", body),
       listGrammar("pairs", [["a", "string"], ["quote_a", "string"], ["b", "string"], ["quote_b", "string"]]),
     );
     for (const p of asList(out, "pairs")) {
@@ -106,7 +109,7 @@ export async function proposeKinds(o: { spans: RunSpan[]; ask: Ask; model: strin
     const body = own.map((s) => `[${s.span}] ${clip(s.text, 500)}`).join("\n");
     if (o.kinds.includes("question")) {
       const out = await o.ask(
-        prompt("questions", "You read one record and list what it leaves unanswered that a curator could look for: who, when, where, what became of it. Give the passage label that raises each question and copy the words that raise it exactly. If nothing is left open, return an empty list.", body),
+        prompt("questions", "You read one record and list what it leaves unanswered that a curator could look for: who, when, where, what became of it. Give the passage label that raises each question and copy the words that raise it exactly, at least three words. If nothing is left open, return an empty list.", body),
         listGrammar("questions", [["passage", "string"], ["quote", "string"], ["question", "string"]], 4),
       );
       for (const q of asList(out, "questions")) {
@@ -130,7 +133,7 @@ export async function proposeKinds(o: { spans: RunSpan[]; ask: Ask; model: strin
     }
     if (o.kinds.includes("gap")) {
       const out = await o.ask(
-        prompt("gaps", "You read one record's account and find gaps in its chain: two dated statements with nothing known between them. Give each end's passage label, copy its words exactly, and say in a few words what is missing between them. If there is no gap, return an empty list.", body),
+        prompt("gaps", "You read one record's account and find gaps in its chain: two dated statements with nothing known between them. Give each end's passage label, copy its whole statement exactly, at least three words, and say in a few words what is missing between them. If there is no gap, return an empty list.", body),
         listGrammar("gaps", [["from", "string"], ["quote_from", "string"], ["to", "string"], ["quote_to", "string"], ["missing", "string"]], 4),
       );
       for (const g of asList(out, "gaps")) {
@@ -167,27 +170,29 @@ export async function proposeKinds(o: { spans: RunSpan[]; ask: Ask; model: strin
     if (entries.length > 1) {
       const body = entries.map((e) => `[${e.label}] ${e.title} — ${clip(e.spans.map((s) => s.text).join(" "), 300)}`).join("\n");
       /** The span of a record that holds the quote, as a citation; undefined if none does. */
-      const find = (e: Entry | undefined, quote: string | undefined): CiteRef | undefined => {
-        if (!e || !quote || quote.length < 2) return undefined;
-        const s = e.spans.find((x) => x.text.includes(quote));
+      const find = (e: Entry | undefined, quote: string | undefined, claim: boolean): CiteRef | undefined => {
+        if (!e || !quote || (claim && !quoteCarries(quote))) return undefined;
+        const s = e.spans.find((x) => spanHolds(x.text, quote));
         return s ? { ref: e.ref, span: s.key, quote } : undefined;
       };
-      const pairOf = (p: Record<string, string>) => {
+      // A duplicate's quotes are claims; a link's are the shared word itself, so short is fine.
+      const pairOf = (p: Record<string, string>, kind: Kind) => {
         const a = byLabel.get(p.a);
         const b = byLabel.get(p.b);
-        const ca = find(a, p.quote_a);
-        const cb = find(b, p.quote_b);
+        const claim = CLAIM_KINDS.includes(kind);
+        const ca = find(a, p.quote_a, claim);
+        const cb = find(b, p.quote_b, claim);
         if (!a || !b || a === b || !(a.fresh || b.fresh) || !ca || !cb) return undefined;
         return { a, b, ca, cb };
       };
       const refKey = (r: RecordRef) => ("hash" in r ? r.hash : r.id);
       if (pairs.includes("duplicate")) {
         const out = await o.ask(
-          prompt("duplicates", "You compare records and list pairs that may be the same object recorded twice: the same caption, credit, size or description. Give both labels and copy the matching words from each exactly. If none match, return an empty list.", body),
+          prompt("duplicates", "You compare records and list pairs that may be the same object recorded twice: the same caption, credit, size or description. Give both labels and copy the matching words from each exactly, at least three words. If none match, return an empty list.", body),
           listGrammar("pairs", [["a", "string"], ["quote_a", "string"], ["b", "string"], ["quote_b", "string"]], 4),
         );
         for (const p of asList(out, "pairs")) {
-          const m = pairOf(p);
+          const m = pairOf(p, "duplicate");
           if (!m) {
             dropped++;
             continue;
@@ -212,7 +217,7 @@ export async function proposeKinds(o: { spans: RunSpan[]; ask: Ask; model: strin
           listGrammar("links", [["a", "string"], ["quote_a", "string"], ["b", "string"], ["quote_b", "string"], ["basis", BASES]], 6),
         );
         for (const p of asList(out, "links")) {
-          const m = pairOf(p);
+          const m = pairOf(p, "link");
           if (!m || !BASES.includes(p.basis as (typeof BASES)[number])) {
             dropped++;
             continue;

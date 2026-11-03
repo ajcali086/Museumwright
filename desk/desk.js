@@ -243,9 +243,10 @@ function queue() {
           ? h("div", { class: "meta" }, `Noticed by ${q.proposed_by}${src.model ? ` with ${src.model}` : ""} on ${q.date}`, q.decided_by ? ` · ${q.status} by ${q.decided_by} on ${q.decided_on}` : "")
           : h("div", { class: "meta" }, `${q.span.kind === "caption" ? "Caption of" : "Passage of"} `, h("a", { href: `#/records/${q.span.record}` }, q.span.recordTitle ?? q.span.record), ` (${q.span.key}) · noticed by ${q.proposed_by}${src.model ? ` with ${src.model}` : ""} on ${q.date}`,
           q.decided_by ? ` · ${q.status} by ${q.decided_by} on ${q.decided_on}` : ""),
-        NEW_KINDS.includes(q.kind) && !q.holds ? h("div", { class: "refusal" }, "The span rule: a citation isn't in its span, word for word, so it can't be kept.") : null,
+        originsRow(q),
+        NEW_KINDS.includes(q.kind) && !q.holds ? h("div", { class: "refusal" }, q.refusal ?? "The span rule: a citation isn't in its span, word for word, so it can't be kept.") : null,
         NEW_KINDS.includes(q.kind) ? kindActions(q, slot, open) : null,
-        q.kind === "name" && !q.holds ? h("div", { class: "refusal" }, `The span rule: ${q.span.key} doesn't contain “${q.proposed_text}”, so it can't be kept.`) : null,
+        q.kind === "name" && !q.holds ? h("div", { class: "refusal" }, q.refusal ?? `The span rule: ${q.span.key} doesn't contain “${q.proposed_text}”, so it can't be kept.`) : null,
         (q.kind ?? "text") === "text" && (open || q.status === "accepted")
           ? h("div", { class: "actions" },
               q.status === "accepted"
@@ -316,6 +317,21 @@ function pairCard(id, c) {
     h("div", {}, r ? h("a", { href: `#/records/${id}` }, r.title) : `${id} (retired)`, h("span", { class: "meta mono" }, ` ${id}`)),
     r?.credit ? h("div", { class: "meta" }, r.credit) : null,
     c ? h("blockquote", { class: "span" }, highlighted(c.text, c.quote)) : null);
+}
+
+/**
+ * Where the quoted words came from. The span rule proves a quote is in its
+ * source, not that the source is right: a pulled page's words are whoever
+ * wrote that page's, so they are marked for the curator to weigh.
+ */
+function originsRow(q) {
+  const os = q.origins ?? [];
+  if (!os.length) return null;
+  const web = os.some((o) => o.from === "web");
+  return h("div", { class: "origins" },
+    "Words from: ",
+    os.map((o) => h("span", { class: `chip${o.from === "web" ? " web" : ""}`, title: o.record }, o.from === "web" ? `web page · ${o.label}` : o.from === "file" ? `file · ${o.label}` : o.label)),
+    web ? "Pulled from the web: the quote is that page's words, not a checked fact." : null);
 }
 
 function kindBody(q) {

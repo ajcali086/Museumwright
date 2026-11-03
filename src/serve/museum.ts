@@ -101,5 +101,9 @@ export function spans(records: Record_[]): Map<string, string> {
 
 export const spanRecord = (key: string) => (key.startsWith("plate:") ? key.slice(6) : key.split("#")[0]);
 
-export const recordText = (r: Record_) =>
-  [r.title, r.caption ?? "", r.credit ?? "", r.alt ?? "", ...(r.passages ?? []).map((p) => p.text)].join("\n");
+/** The spans of one record, by key. */
+export const recordSpans = (text: Map<string, string>, id: string) =>
+  [...text].filter(([key]) => spanRecord(key) === id).map(([, words]) => words);
+
+/** Every kept name: each entity's label and aliases. */
+export const keptNames = (entities: Entity[]) => entities.flatMap((e) => [e.label, ...(e.aliases ?? []).map((a) => a.name)]);

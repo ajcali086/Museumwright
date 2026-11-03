@@ -25,8 +25,28 @@ import { apply, check, diffOf, museumScript, planDecide, planKeep, planNote, pla
 import { Desk, DeskError, stateDirFor } from "./auth.ts";
 import { planAddEvidence, planApply, planProposeText, planRetire, planSaveEntity, planSaveQuestion, planSaveRecord } from "./edit.ts";
 import * as G from "./git.ts";
-import { planKeepContradiction, planKeepDuplicate, planKeepLink, planKeepQuestion, planMerge, planSettle, readBothStand, readLinks, type QuestionFields } from "./kinds.ts";
-import { isMuseum, readMuseum, spanRecord, spans } from "./museum.ts";
+import { citeRefusal, planKeepContradiction, planKeepDuplicate, planKeepLink, planKeepQuestion, planMerge, planSettle, readBothStand, readLinks, type QuestionFields } from "./kinds.ts";
+import { spanHolds } from "../spanrule.ts";
+import { isMuseum, readMuseum, spanRecord, spans, type Record_ } from "./museum.ts";
+
+/**
+ * Where a record's words came from, for the desk to show beside every
+ * proposal: a pulled page's words are whoever wrote that page's, and the
+ * model reads them as they are, so a curator should weigh the source, not
+ * only the quote.
+ */
+export function originOf(r: Record_ | undefined): { from: "web" | "file" | "desk"; label: string } {
+  const src = (r?.source ?? {}) as { url?: string; file?: string };
+  if (src.url) {
+    try {
+      return { from: "web", label: new URL(src.url).hostname };
+    } catch {
+      return { from: "web", label: src.url };
+    }
+  }
+  if (src.file) return { from: "file", label: basename(src.file) };
+  return { from: "desk", label: "typed at the desk" };
+}
 
 export const DESK_DIR = fileURLToPath(new URL("../../desk/", import.meta.url));
 
@@ -129,7 +149,16 @@ export function createMuseumServer(opts: ServeOptions) {
           return {
             ...x,
             span: { key: x.target, text: span ?? null, record: rid, recordTitle: byId.get(rid)?.title ?? null, kind: x.target.startsWith("plate:") ? "caption" : "passage" },
-            holds: x.kind === "name" ? span !== undefined && span.includes(x.proposed_text) : ((x as { cites?: { span: string; quote: string }[] }).cites ?? []).every((ct) => !!text.get(ct.span)?.includes(ct.quote)),
+            // The same refusal the Keep action gives, so the desk never offers a keep check:model would roll back.
+            ...(() => {
+              const refusal = x.kind === "name" ? (spanHolds(span, x.proposed_text) ? undefined : `The span rule: ${x.target} doesn't contain “${x.proposed_text}”, so it can't be kept.`) : x.kind && x.kind !== "text" ? citeRefusal(m, x) : undefined;
+              return { holds: !refusal, refusal: refusal ?? null };
+            })(),
+            // A name or a text correction stands on its own span's record; every other kind on the records it cites.
+            origins: [...new Set(x.kind === "name" || (x.kind ?? "text") === "text" ? [rid] : ((x as { cites?: { span: string }[] }).cites ?? []).map((ct) => spanRecord(ct.span)))].map((id) => ({
+              record: id,
+              ...originOf(byId.get(id)),
+            })),
             citations: ((x as { cites?: { span: string; quote: string }[] }).cites ?? []).map((ct) => ({ ...ct, text: text.get(ct.span) ?? null, record: spanRecord(ct.span), recordTitle: byId.get(spanRecord(ct.span))?.title ?? null })),
           };
         })

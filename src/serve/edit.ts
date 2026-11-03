@@ -13,7 +13,8 @@ import { randomBytes } from "node:crypto";
 import { slugify } from "../util.ts";
 import { DeskError } from "./auth.ts";
 import { body, today, type Plan, type Write } from "./actions.ts";
-import { PATHS, readMuseum, spanRecord, spans, type Entity, type Museum, type Record_ } from "./museum.ts";
+import { quoteCarries, spanHolds, tooShort } from "../spanrule.ts";
+import { PATHS, keptNames, readMuseum, spanRecord, spans, type Entity, type Museum, type Record_ } from "./museum.ts";
 
 const KINDS = ["person", "family", "place", "organization", "event"];
 const text = (v: unknown) => (typeof v === "string" ? v.trim() : "");
@@ -140,17 +141,18 @@ export function planSaveQuestion(dir: string, input: QuestionInput, who: string)
 
 export type EvidenceInput = { span?: string; quote?: string; record?: string; type?: string; note?: string };
 
-/** An evidence link: a curator's act, appended, never rewritten. The quote must be in its span, verbatim. */
+/** An evidence link: a curator's act, appended, never rewritten. The quote must be in its span, verbatim, and long enough to carry the claim. */
 export function planAddEvidence(dir: string, input: EvidenceInput, who: string): Plan {
   const m = readMuseum(dir);
   const span = need(text(input.span), "The span");
-  const quote = need(typeof input.quote === "string" ? input.quote : "", "The quote");
+  const quote = need(typeof input.quote === "string" ? input.quote.trim() : "", "The quote");
   const record = need(text(input.record), "The record");
   const type = text(input.type);
   if (!["supports", "contradicts", "qualifies"].includes(type)) throw new DeskError(400, "Evidence supports, contradicts or qualifies.");
   const words = spans(m.records).get(span);
   if (words === undefined) throw new DeskError(404, `No span ${span}.`);
-  if (!words.includes(quote)) throw new DeskError(422, `The quote isn't in ${span}, word for word. The span reads: “${words}”`);
+  if (!spanHolds(words, quote)) throw new DeskError(422, `The quote isn't in ${span}, word for word. The span reads: “${words}”`);
+  if (!quoteCarries(quote, keptNames(m.entities))) throw new DeskError(422, `${tooShort(quote)}.`);
   const used = new Set((m.evidence as { id: string }[]).map((e) => e.id));
   let n = used.size + 1;
   let id: string;

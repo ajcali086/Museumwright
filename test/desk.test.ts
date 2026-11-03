@@ -79,6 +79,9 @@ describe("the desk, in Chromium, from nothing", { skip: noBrowser }, () => {
     const rows = page.locator("article.row");
     assert.ok((await rows.count()) >= 2);
     assert.equal(await rows.first().locator("mark").innerText(), await rows.first().locator(".name").innerText(), "the span spells the name, marked");
+    const from = rows.first().locator(".origins");
+    assert.equal(await from.locator(".chip.web").innerText(), `web page · ${new URL(site.url).hostname}`, "pulled words are marked with their page's host");
+    assert.match(await from.innerText(), /the quote is that page's words, not a checked fact/);
   });
 
   it("keeps a name: shows the change first, then writes it", async () => {

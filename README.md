@@ -109,7 +109,19 @@ If the check refuses, the files are put back and the refusal is the
 answer. If it passes, the public slice is rebuilt and the change is one
 git commit on the box, in the curator's name. The span rule holds at the
 desk too: a name its span doesn't contain can't be kept, and the refusal
-quotes the span.
+quotes the span. A verbatim quote proves the words exist, not that they
+carry the claim, so a quote that stands for a statement (evidence, a
+contradiction, a question, a gap, a duplicate, a Both Stand claim) must
+also be 12 characters or 3 words, unless it is exactly an entity's name.
+Names and links are exempt: there the short shared word is the claim. One
+rule, in `src/spanrule.ts`, serves the proposer and the desk; the
+generated `check:model` carries the same two functions, and a test holds
+the copies to the same answers.
+
+Beside each proposal the desk shows where its words came from: a web
+page (by its host), a file, or the desk itself. The span rule can't tell
+a true page from a planted one, so pulled words are marked for the
+curator to weigh.
 
 **Offline and online.** The box keeps the museum's history in git, so
 nothing waits on the web. When the web is there, Sync sends the box's
@@ -127,7 +139,11 @@ museum's repository (`--state`, default
 `~/.local/state/museumwright/<id>/`). Sign-in is a session cookie
 (HttpOnly, SameSite=Strict, 12 hours, gone on restart), and each decision
 records the name typed at sign-in. Desk writes must carry a header no
-cross-site form can send. Missed passcodes slow down the next attempt.
+cross-site form can send. Missed passcodes slow down the next attempt,
+and sign-ins wait their turn, so guesses sent all at once are slowed too.
+On the network the desk speaks plain HTTP: the passcode and the cookie
+cross it unencrypted, which the server says when it starts. Use it on a
+network you trust, or keep it to the box with `--host 127.0.0.1`.
 
 **On the box:** Node 22.6+, git, poppler-utils for PDFs, and, for proposed
 names, llama.cpp's `llama-server` with Qwen3-1.7B (`--model-url`,
@@ -260,8 +276,9 @@ reach the public slice, without the ID of the proposal they came from.
 `npm run check:model` in a generated museum refuses, among others: a file
 not named for its ID; a held record with nothing held; a record `mw`
 wrote whose input hash doesn't claim it; an ID claimed twice or
-tombstoned and in use; an entity with no anchor, or with none that
-spells its name; an evidence quote not verbatim in its span; a
+tombstoned and in use; an entity with no anchor, or with no span of
+an anchor that spells its name; an evidence quote not verbatim in its
+span, or too short to carry its claim; a
 contradiction no question carries; any proposal citing words its span doesn't hold; a kept name with no
 anchored entity, a kept contradiction with no Both Stand entry, a kept
 question, gap or link with nothing opened from it; a merged duplicate

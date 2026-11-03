@@ -1,4 +1,4 @@
-/** What the stand-in model "notices" in the Angie page for each newer kind: one good proposal of each, and some whose quotes aren't in their spans. */
+/** What the stand-in model "notices" in the Angie page for each newer kind: one good proposal of each, some whose quotes aren't in their spans, and one too short to carry its claim. */
 import type { TaskAnswer } from "../../helpers.ts";
 
 const find = (lines: { label: string; text: string }[], words: string) => lines.find((l) => l.text.includes(words))?.label ?? "none";
@@ -14,7 +14,7 @@ export const answers: TaskAnswer = (task, lines) => {
     };
   if (task === "questions") {
     const p = find(lines, "never disclosed");
-    return p === "none" ? { questions: [] } : { questions: [{ passage: p, quote: "The nature of the surgery was never disclosed.", question: "What was the operation in December 1930?" }, { passage: p, quote: "The surgery was disclosed.", question: "Invented?" }] };
+    return p === "none" ? { questions: [] } : { questions: [{ passage: p, quote: "The nature of the surgery was never disclosed.", question: "What was the operation in December 1930?" }, { passage: p, quote: "The surgery was disclosed.", question: "Invented?" }, { passage: p, quote: "surgery", question: "Too short to stand on?" }] };
   }
   if (task === "gaps") {
     const p = find(lines, "by 1942 she disappears");

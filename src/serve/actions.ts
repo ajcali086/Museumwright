@@ -13,7 +13,8 @@ import { dirname, join } from "node:path";
 import { slugify } from "../util.ts";
 import { DeskError } from "./auth.ts";
 import { commitAll, discard, dirty } from "./git.ts";
-import { PATHS, readMuseum, recordText, spanRecord, spans, type Correction, type Entity, type Museum } from "./museum.ts";
+import { spanHolds } from "../spanrule.ts";
+import { PATHS, readMuseum, recordSpans, spanRecord, spans, type Correction, type Entity, type Museum } from "./museum.ts";
 
 /** A file written whole, or (retiring a record) taken away. */
 export type Write = { path: string; after: string; delete?: false } | { path: string; delete: true };
@@ -84,7 +85,7 @@ const findCorrection = (m: Museum, id: string): Correction => {
 export function spanRefusal(m: Museum, c: Correction): string | undefined {
   const text = spans(m.records).get(c.target);
   if (text === undefined) return `Can't keep “${c.proposed_text}”: its span ${c.target} isn't in the museum.`;
-  if (!text.includes(c.proposed_text)) return `Can't keep “${c.proposed_text}”: the span ${c.target} doesn't contain it. The span reads: “${text}”`;
+  if (!spanHolds(text, c.proposed_text)) return `Can't keep “${c.proposed_text}”: the span ${c.target} doesn't contain it. The span reads: “${text}”`;
   return undefined;
 }
 
@@ -117,7 +118,8 @@ export function planKeep(dir: string, id: string, as: KeepAs, who: string): Plan
     const label = as.label.trim() || name;
     if (!KINDS.includes(as.kind)) throw new DeskError(400, `An entity is a ${KINDS.join(", ")}.`);
     const r = m.records.find((x) => x.id === record);
-    if (label !== name && !(r && recordText(r).includes(label)))
+    // An entity is anchored in a single span, as check:model reads it: the label must be spelled in one.
+    if (label !== name && !(r && recordSpans(spans(m.records), record).some((words) => spanHolds(words, label))))
       throw new DeskError(422, `“${label}” isn't how ${record} spells it. Keep the name as spelled, “${name}”, or pick an existing entity.`);
     const used = new Set(m.entities.map((e) => e.id));
     let eid: string;

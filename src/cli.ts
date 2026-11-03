@@ -274,6 +274,8 @@ const COMMANDS: Record<string, Command> = {
       console.log(`  Museum:   ${dir}${isMuseum(dir) ? "" : "  (not made yet: create it at the desk)"}`);
       console.log(`  Desk:     http://localhost:${actual}/desk/${lan.length ? `\n            ${lan.map((u) => `${u}/desk/`).join("\n            ")}   (from other devices)` : ""}`);
       console.log(`  Visitors: http://localhost:${actual}/${lan.length ? `   ${lan.map((u) => `${u}/`).join("   ")}` : ""}`);
+      if (!["127.0.0.1", "::1", "localhost"].includes(host))
+        console.log(`\n  On the network, the desk speaks plain HTTP: its passcode and sign-in cross the network unencrypted.\n  Use it on a network you trust, or keep it to this computer:  mw desk --host 127.0.0.1`);
       if (!desk.configured) console.log(`\n  Setup code: ${desk.setupCode}\n  Type it at the desk once, with a passcode you choose.`);
       await new Promise(() => undefined);
       return 0;
